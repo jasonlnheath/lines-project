@@ -1,21 +1,21 @@
 /**
  * Agent Service Core
  * Orchestrates natural language queries with tool execution
+ * Uses GLM API (Zhipu AI / z.ai)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { AgentQuery, AgentResponse, ToolTraceEntry, Tool, toolRegistry } from './types';
 
+const GLM_API_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+
 export class AgentService {
-  private anthropic: Anthropic;
+  private apiKey: string;
 
   constructor() {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    this.apiKey = process.env.GLM_API_KEY || '';
+    if (!this.apiKey) {
+      throw new Error('GLM_API_KEY environment variable is not set');
     }
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
   }
 
   /**
@@ -65,7 +65,7 @@ export class AgentService {
         }
       }
 
-      // Step 3: Generate final response using Claude
+      // Step 3: Generate final response using GLM
       const answer = await this.generateResponse(query.query, toolResults, toolTrace);
 
       return {
@@ -78,6 +78,33 @@ export class AgentService {
         toolTrace,
       };
     }
+  }
+
+  /**
+   * Call GLM API
+   */
+  private async callGLM(messages: Array<{ role: string; content: string }>, maxTokens: number = 1000): Promise<string> {
+    const response = await fetch(GLM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'glm-4-flash',
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`GLM API error: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
   }
 
   /**
@@ -101,21 +128,16 @@ Analyze the user's query and determine which tools to use. Return your response 
 Only use the tools that are necessary. If the query is unclear, you may return an empty array.`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: query }],
-      });
+      const response = await this.callGLM([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: query },
+      ], 500);
 
-      const content = response.content[0];
-      if (content.type === 'text') {
-        // Try to parse JSON from the response
-        const jsonMatch = content.text.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return parsed;
-        }
+      // Try to parse JSON from the response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return parsed;
       }
     } catch (error) {
       console.error('Error planning tool execution:', error);
@@ -145,19 +167,12 @@ Be concise but thorough. If tool results are empty or show errors, let the user 
 Reference specific emails when relevant (include subject, sender, date).`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [
-          { role: 'user', content: `User query: ${query}\n\n${context}` },
-        ],
-      });
+      const response = await this.callGLM([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `User query: ${query}\n\n${context}` },
+      ], 1000);
 
-      const content = response.content[0];
-      if (content.type === 'text') {
-        return content.text;
-      }
+      return response;
     } catch (error) {
       console.error('Error generating response:', error);
     }

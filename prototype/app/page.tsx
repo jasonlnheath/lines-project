@@ -50,7 +50,7 @@ export default function Home() {
 AZURE_TENANT_ID=your_tenant_id_or_common
 AZURE_CLIENT_SECRET=your_client_secret
 AZURE_REDIRECT_URI=http://localhost:3000/api/auth/callback
-ANTHROPIC_API_KEY=your_anthropic_api_key
+GLM_API_KEY=your_glm_api_key
 NEXT_PUBLIC_APP_URL=http://localhost:3000`}
           </pre>
         </section>
