@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://stackoverflow.com/questions/78866946/how-do-i-read-sms-messages-in-android-13-and-above-using-an-android-app",
+    "name": "How do I read SMS messages in Android (13 and above) using an",
+    "snippet": "I am an Android developer working on a startup project that involves reading SMS messages from a specific number. However, due to restrictions ... How to read sms via background service in Android 14? Android – Listen For Incoming SMS Messages - Stack Overflow More results from stackoverflow.com",
+    "host_name": "stackoverflow.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.android.com/reference/android/Manifest.permission",
+    "name": "Manifest.permission | API reference - Android Developers",
+    "snippet": "... read/write access to the \"properties\" table in the checkin database, to ... CallScreeningService , to ensure that only the system can bind to it ...",
+    "host_name": "developer.android.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@harshalp2120/building-a-caller-id-and-spam-blocker-app-for-android-in-2023-b8587b03604a",
+    "name": "Building a Caller ID and Spam Blocker App for Android in 2023 - Medium",
+    "snippet": "Implementing the CallScreeningService API is simple. Start by creating a class that extends the CallScreeningService class provided by the ...",
+    "host_name": "medium.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.android.com/reference/android/widget/inline/InlineContentView",
+    "name": "InlineContentView | API reference - Android Developers",
+    "snippet": "... to your app. Instances of this class are created by the platform and can be programmatically attached to your UI. Once the view is attached to the window ...",
+    "host_name": "developer.android.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tutorialspoint.com/how-can-i-read-sms-messages-from-the-device-programmatically-in-android",
+    "name": "How can I read SMS messages from the device programmatically in",
+    "snippet": "In this article we will take a look on How can i read sms messages from the device programmatically in Android. Missing: CallScreeningService 13 14 restrictions",
+    "host_name": "www.tutorialspoint.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=9fIiQ9YQ7BI",
+    "name": "Complete Guide on Reading SMS (Inbox & Sent) in Android - YouTube",
+    "snippet": "Complete Guide on Reading SMS (Inbox & Sent) in Android - Easy Tutorial. 16K views · 2 years ago ...more ... Missing: CallScreeningService 13 restrictions",
+    "host_name": "www.youtube.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/android.telecom.callscreeningservice?view=net-android-35.0",
+    "name": "CallScreeningService Class (Android.Telecom) | Microsoft Learn",
+    "snippet": "A CallScreeningService can also see outgoing calls for the purpose of providing caller ID services for those calls. Missing: programmatically 13 14",
+    "host_name": "learn.microsoft.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/android-news/detecting-sending-sms-on-android-8a154562597f",
+    "name": "Detecting & sending SMS on Android | by Joaquim Ley - Medium",
+    "snippet": "Setting up a BroadcastReceiver to listen and handle for incoming SMS. 1. Asking for permission. We'll need to ask for some permissions in order ... Missing: CallScreeningService 14 restrictions",
+    "host_name": "medium.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.quora.com/How-can-I-create-an-Android-app-which-auto-receive-calls-programmatically-from-particular-numbers-and-works-on-all-Android-versions-1",
+    "name": "How to create an Android app which auto receive calls programmatically",
+    "snippet": "How can I automatically record all of my phone calls and texts every time I create a text receive a text, receive a call, or make a call ...",
+    "host_name": "www.quora.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.tutorialspoint.com/how-to-listen-for-incoming-sms-messages-in-android",
+    "name": "How to listen for incoming SMS messages in Android? - TutorialsPoint",
+    "snippet": "Explanation : In the above code for AndroidManifest.xml file we are adding permissions to read sms. Along with that we are creating a receiver ... Missing: CallScreeningService API 13 14 restrictions",
+    "host_name": "www.tutorialspoint.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

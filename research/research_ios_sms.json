@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://support.apple.com/guide/iphone/screen-and-filter-texts-iph203ab0be4/ios",
+    "name": "Screen and filter text messages on iPhone - Apple Support",
+    "snippet": "Note: Filters apply to promotions and transactions (or whatever your third-party message filtering extension offers). Text message filtering doesn't apply to ... Missing: framework API",
+    "host_name": "support.apple.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/videos/play/wwdc2022/110341",
+    "name": "Explore SMS message filters - WWDC22 - Videos - Apple Developer",
+    "snippet": "SMS message filter extensions can help people manage Messages by filtering SMS messages from unknown senders. Discover how to create apps with message ... Missing: framework third party",
+    "host_name": "developer.apple.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/documentation/identitylookup/sms-and-mms-message-filtering",
+    "name": "SMS and MMS Message Filtering | Apple Developer Documentation",
+    "snippet": "Create an app extension that identifies and filters unwanted SMS and MMS messages while preserving user privacy. Missing: framework third party",
+    "host_name": "developer.apple.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://en.eeworld.com.cn/news/xfdz/eic511869.html",
+    "name": "Use iOS's \"SMS Filtering\" function with third-party apps - EEWorld",
+    "snippet": "This is an SMS filtering tool developed based on the CoreML machine learning framework. It can filter SMS according to \"transaction information\" ... Missing: MessageFilter API",
+    "host_name": "en.eeworld.com.cn",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@payalmaniyar/create-message-spam-filter-extension-for-ios-11-df554908d776",
+    "name": "Create message spam filter extension for iOS 11. | by Payal Maniyar",
+    "snippet": "Apple introduces IdentityLookup framework which allows developers to filter unwanted SMS and MMS. ... third-party SMS blocker app of your choice. Missing: API | Show results with: API",
+    "host_name": "medium.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.vonage.com/resources/articles/ios-updates-impacts",
+    "name": "iOS 26 Message Filtering: Business Communication Guide - Vonage",
+    "snippet": "Apple's iOS 26 introduces message filtering that affects business SMS. Learn how to maintain customer engagement and ensure your messages ...",
+    "host_name": "www.vonage.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/68162883/make-api-call-from-message-filter-extension-on-ios",
+    "name": "Make API call from message filter extension on iOS - Stack Overflow",
+    "snippet": "I would like to make an API call inside the extension class that is responsible with filtering the received messages but so far it's not working. Missing: third | Show results with: third",
+    "host_name": "stackoverflow.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=tU8ZhmrlurY&vl=en",
+    "name": "WWDC22: Explore SMS message filters | Apple - YouTube",
+    "snippet": "SMS message filter extensions can help people manage Messages by filtering SMS messages from unknown senders. Discover how to create apps ... Missing: API third party",
+    "host_name": "www.youtube.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.linkedin.com/posts/bordash_tired-of-getting-these-spam-messages-from-activity-7365459576101502977-fpJb",
+    "name": "Why iMessage spam messages evade iPhone filters",
+    "snippet": "... API for writing a Message Filter Extension, is designed exclusively for filtering SMS and MMS messages from unknown senders, not iMessages ...",
+    "host_name": "www.linkedin.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://9to5mac.com/2022/06/15/sms-filtering-api-more-categories-ios-16",
+    "name": "SMS filtering API now supports more categories with iOS 16 - 9to5Mac",
+    "snippet": "You may not be familiar with this, but iOS has APIs to let third-party apps detect and alert users about spam calls and SMS. With iOS 16 ...",
+    "host_name": "9to5mac.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

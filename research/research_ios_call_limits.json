@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://developer.apple.com/documentation/callkit",
+    "name": "CallKit | Apple Developer Documentation",
+    "snippet": "In addition to handling calls, you can use a Call Directory app extension to provide caller ID information and a list of blocked numbers associated with your ...",
+    "host_name": "developer.apple.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://stackoverflow.com/questions/58273432/how-to-determine-callkit-call-directory-app-extension-limits",
+    "name": "How to determine CallKit Call Directory App Extension limits?",
+    "snippet": "Call Directory Extension's limits depend from the device memory, so as was mentioned in the comments there are no any specified limits. iPhone call log / history - ios - Stack Overflow How to use call directory extension to identify a incoming call in my ... More results from stackoverflow.com Missing: history | Show results with: history",
+    "host_name": "stackoverflow.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/forums/tags/callkit/?page=5&sortBy=oldest",
+    "name": "CallKit | Apple Developer Forums",
+    "snippet": "I added a extension called Call Directory to an IOS app as we want to call blocking and caller id. I was able to add App Groups to both runner and CallDirectory ...",
+    "host_name": "developer.apple.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://support.ringcentral.com/article-v2/Calls-Received-in-RingCentral-App-for-iOS-Showing-in-Mobile-Call-Logs.html?brand=RC_US&product=RingCentral_Phone&language=en_US",
+    "name": "Calls Received in RingCentral App for iOS Showing in Mobile Call",
+    "snippet": "This article explains why users see calls received in the RingCentral mobile app are shown in the call logs along with native mobile calls.",
+    "host_name": "support.ringcentral.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://heusser.pro/p/get-missed-call-notifications-for-teams-call-queues-free-community-solution-cozo3bhojb7t",
+    "name": "Get Missed Call Notifications for Teams Call Queues (Free",
+    "snippet": "An iPhone will only show missed calls if the call was offered to the signed in agent. So, this only works with attendant routing (all agents are ...",
+    "host_name": "heusser.pro",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://wildix.atlassian.net/wiki/spaces/DOC/pages/30284531/ACL+rules+and+Call+classes+management+-+Admin+Guide",
+    "name": "ACL rules and Call classes management - Admin Guide - Atlassian",
+    "snippet": "This Guide explains and describes what permissions and limitations for PBX users and administrators can be set to limit access to certain PBX services and ...",
+    "host_name": "wildix.atlassian.net",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/iphone/comments/1nowoj9/what_app_will_give_me_unlimited_call_log_call",
+    "name": "What app will give me unlimited call log / call history on iPhone",
+    "snippet": "My understanding is the latest iOS has significantly extended call history - to 1000 calls. ... TIL that iPhone can only show up to 100 calls log. iOS 26: See Your Full Call History With Any iPhone Contact - Reddit TIL that iPhone can only show up to 100 calls log. : r/ios - Reddit More results from www.reddit.com Missing: Directory notifications",
+    "host_name": "www.reddit.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://documentation.bloomreach.com/engagement/docs/ios-sdk-push-notifications",
+    "name": "Push notifications - Bloomreach Documentation",
+    "snippet": "By default, if an iOS app receives a notification while the app is in the foreground, the notification banner is not displayed. In iOS 10 and later, you can ...",
+    "host_name": "documentation.bloomreach.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.microsoft.com/en-us/microsoft-365/roadmap",
+    "name": "Microsoft 365 Roadmap",
+    "snippet": "The Microsoft 365 roadmap provides estimated release dates and descriptions for commercial features. All information is subject to change.",
+    "host_name": "www.microsoft.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.cbp.gov/travel/trusted-traveler-programs/global-entry/frequently-asked-questions",
+    "name": "Global Entry Frequently Asked Questions",
+    "snippet": "Global Entry is a risk-based approach to facilitate the entry of pre-approved travelers. Applicants may not qualify for Global Entry participation if they:",
+    "host_name": "www.cbp.gov",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

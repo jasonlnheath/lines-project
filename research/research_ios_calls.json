@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://stackoverflow.com/questions/73496060/cant-add-call-directory-extension-to-app",
+    "name": "ios - Can't add Call Directory Extension to app - Stack Overflow",
+    "snippet": "I am trying to add the Call Directory Extension to my app to build a simple call blocker, and when I add it to my project and build the app it does not show up. How to enable Ios Callkit Call Directory extension CallDirectoryExtension has an error during user use [loading indefinitely] More results from stackoverflow.com Missing: capabilities | Show results with: capabilities",
+    "host_name": "stackoverflow.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/documentation/callkit/identifying-and-blocking-calls",
+    "name": "Identifying and blocking calls",
+    "snippet": "Create a Call Directory app extension to identify and block incoming callers by their phone number. Missing: capabilities 2024",
+    "host_name": "developer.apple.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/@bhumitapanara/blocking-numbers-in-your-custom-app-with-callkit-extension-c822e84f3f2e",
+    "name": "Blocking numbers in your Custom app with CallKit Extension",
+    "snippet": "In the context of this blog post, we will explore and will be discussing the Callkit framework for covering the specific feature of blocking a number from your ...",
+    "host_name": "medium.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/documentation/callkit",
+    "name": "CallKit | Apple Developer Documentation",
+    "snippet": "Use a Call Directory app extension to block calls and provide caller ID information. Identifying and blocking calls. Create a Call Directory app extension to ... Missing: 2024 | Show results with: 2024",
+    "host_name": "developer.apple.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://agostini.tech/2019/07/14/block-and-identify-calls-with-call-directory-app-extension",
+    "name": "Block and Identify Calls with Call Directory App Extension",
+    "snippet": "Call Directory is a simple app extension that allows your app to supplement the system call directory. You an only do two things with the extension. Missing: 2024 | Show results with: 2024",
+    "host_name": "agostini.tech",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/beepscore/CallKitty",
+    "name": "beepscore/CallKitty: Use Swift iOS CallKit and Realm.",
+    "snippet": "Apps can create a Call Directory app extension to identify and block incoming callers by their phone number. Missing: 2024 | Show results with: 2024",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://pusher.com/tutorials/callkit-ios-part-2",
+    "name": "Implement the CallKit extension for iOS - Part 2",
+    "snippet": "In this tutorial we have created a CallKit extension that uses shared Core Data to identify and block callers. Missing: 2024 | Show results with: 2024",
+    "host_name": "pusher.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/reactnative/comments/190cec6/ios_call_directory_extension",
+    "name": "iOS Call Directory Extension : r/reactnative - Reddit",
+    "snippet": "I'm a web dev looking at using expo / react native to create an app for iOS. Looks like I'll be needing to use Callkit with a Call Directory app extension.",
+    "host_name": "www.reddit.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.kodeco.com/1276414-callkit-tutorial-for-ios",
+    "name": "CallKit Tutorial for iOS",
+    "snippet": "Uses system services to report incoming and outgoing calls. Manages a call directory to identify or block incoming calls. Note: CallKit features ...",
+    "host_name": "www.kodeco.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.apple.com/forums/tags/callkit",
+    "name": "CallKit | Apple Developer Forums",
+    "snippet": "The extension is enabled in Settings → Phone → Call Blocking & Identification. The extension is reloaded after adding numbers. The array of numbers is sorted in ...",
+    "host_name": "developer.apple.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]
