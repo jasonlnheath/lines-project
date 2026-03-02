@@ -1,5 +1,6 @@
 import { Header } from '@/components/Header';
 import { SearchInterface } from '@/components/SearchInterface';
+import { OneDriveTest } from '@/components/OneDriveTest';
 
 export default function Home() {
   return (
@@ -8,6 +9,10 @@ export default function Home() {
         <Header />
 
         <SearchInterface />
+
+        <div className="mt-8">
+          <OneDriveTest />
+        </div>
 
         <section className="mt-8 bg-gray-100 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Prototype Status</h2>
@@ -29,8 +34,8 @@ export default function Home() {
               <span>Agent service with tools (read, grep, glob, fetch, summarize)</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-gray-400">○</span>
-              <span className="text-gray-500">OneDrive integration</span>
+              <span className="text-green-600">✓</span>
+              <span>OneDrive integration</span>
             </li>
           </ul>
         </section>
