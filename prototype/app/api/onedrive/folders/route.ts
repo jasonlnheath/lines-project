@@ -6,22 +6,60 @@ import { listFolders } from '@/services/onedrive';
  */
 export async function GET(request: NextRequest) {
   try {
-    const tokens = request.cookies.get('auth_tokens')?.value;
+    const refreshData = request.cookies.get('refresh_data')?.value;
 
-    if (!tokens) {
+    if (!refreshData) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const tokenData = JSON.parse(tokens);
+    const data = JSON.parse(refreshData);
+    const { refreshToken, expiresAt } = data;
 
-    if (Date.now() >= tokenData.expiresAt - 300000) {
+    if (!refreshToken) {
+      return NextResponse.json(
+        { error: 'No refresh token available' },
+        { status: 401 }
+      );
+    }
+
+    // Check if token is expired (with 5 min buffer)
+    if (Date.now() >= expiresAt - 300000) {
       return NextResponse.json(
         { error: 'Token expired', refreshRequired: true },
         { status: 401 }
       );
     }
 
-    const folders = await listFolders(tokenData.accessToken);
+    // Get fresh access token by calling refresh endpoint
+    const cookieHeader = request.headers.get('cookie');
+
+    const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(cookieHeader && { Cookie: cookieHeader }),
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      return NextResponse.json(
+        { error: 'Failed to refresh access token' },
+        { status: 401 }
+      );
+    }
+
+    const refreshDataResult = await refreshResponse.json();
+
+    if (refreshDataResult.error) {
+      return NextResponse.json(
+        { error: refreshDataResult.error },
+        { status: 401 }
+      );
+    }
+
+    const accessToken = refreshDataResult.accessToken;
+
+    const folders = await listFolders(accessToken);
 
     return NextResponse.json({ folders });
   } catch (error) {

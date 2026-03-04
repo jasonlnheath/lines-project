@@ -1,18 +1,19 @@
 import { Header } from '@/components/Header';
 import { SearchInterface } from '@/components/SearchInterface';
 import { OneDriveTest } from '@/components/OneDriveTest';
+import { OnboardingWrapper } from '@/components/OnboardingWrapper';
 
 export default function Home() {
   return (
     <main className="min-h-screen p-8 bg-gray-50">
       <div className="max-w-4xl mx-auto">
-        <Header />
-
-        <SearchInterface />
-
-        <div className="mt-8">
-          <OneDriveTest />
-        </div>
+        <OnboardingWrapper>
+          <Header />
+          <SearchInterface />
+          <div className="mt-8">
+            <OneDriveTest />
+          </div>
+        </OnboardingWrapper>
 
         <section className="mt-8 bg-gray-100 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Prototype Status</h2>
@@ -36,6 +37,14 @@ export default function Home() {
             <li className="flex items-center gap-2">
               <span className="text-green-600">✓</span>
               <span>OneDrive integration</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              <span>Multi-model architecture (GLM-5, GLM-4.7, GLM-4.5-Air)</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              <span>User persona system</span>
             </li>
           </ul>
         </section>

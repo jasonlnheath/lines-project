@@ -35,12 +35,16 @@ export interface AgentQuery {
   query: string;
   userId: string;
   accessToken: string;
+  conversationHistory?: Message[];
+  previousToolResults?: Record<string, any>;
 }
 
 export interface AgentResponse {
   answer: string;
   toolTrace: ToolTraceEntry[];
   sources?: EmailSource[];
+  conversationHistory?: Message[];
+  toolResults?: Record<string, any>;
 }
 
 export interface ToolTraceEntry {

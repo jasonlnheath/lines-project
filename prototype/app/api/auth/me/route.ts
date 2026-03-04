@@ -4,19 +4,28 @@ import { NextRequest, NextResponse } from 'next/server';
  * Get current authentication status
  */
 export async function GET(request: NextRequest) {
-  const tokens = request.cookies.get('auth_tokens')?.value;
+  const refreshData = request.cookies.get('refresh_data')?.value;
   const userInfo = request.cookies.get('user_info')?.value;
 
-  if (!tokens || !userInfo) {
+  console.log('/api/auth/me called');
+  console.log('Has refresh_data:', !!refreshData);
+  console.log('Has userInfo:', !!userInfo);
+  console.log('All cookies:', request.cookies.getAll().map(c => c.name));
+
+  if (!refreshData || !userInfo) {
     return NextResponse.json({ authenticated: false });
   }
 
   try {
-    const tokenData = JSON.parse(tokens);
+    // Next.js auto-decodes cookie values
+    const data = JSON.parse(refreshData);
     const user = JSON.parse(userInfo);
 
     // Check if token is expired
-    const isExpired = Date.now() >= tokenData.expiresAt - 300000; // 5 min buffer
+    const isExpired = Date.now() >= data.expiresAt - 300000; // 5 min buffer
+
+    console.log('Token expired:', isExpired);
+    console.log('User:', user.email);
 
     return NextResponse.json({
       authenticated: !isExpired,
@@ -24,6 +33,7 @@ export async function GET(request: NextRequest) {
       expired: isExpired,
     });
   } catch (error) {
+    console.error('Error parsing auth data:', error);
     return NextResponse.json({ authenticated: false });
   }
 }

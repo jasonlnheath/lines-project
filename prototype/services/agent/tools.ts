@@ -90,35 +90,62 @@ export const grepTool: Tool = {
   handler: async ({ pattern, caseSensitive = 'false', limit = '10' }, context): Promise<ToolResult> => {
     try {
       // Use $search for content search in Graph API
+      // Note: Graph API doesn't support combining $filter or $orderby with $search
+      // Search results will be ranked by relevance, then we filter client-side
       const searchQuery = caseSensitive === 'true' ? `"${pattern}"` : `"${pattern}"`;
-      const response = await fetch(`${graphEndpoints.messages}?$search=${encodeURIComponent(searchQuery)}&$top=${limit}&$select=id,subject,from,receivedDateTime,body`, {
+      const url = `${graphEndpoints.messages}?$search=${encodeURIComponent(searchQuery)}&$top=${limit}&$select=id,subject,from,receivedDateTime,body`;
+
+      console.log('[grepTool] Searching emails:', { url, searchQuery, limit });
+
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${context.accessToken}`,
         },
       });
 
+      console.log('[grepTool] Graph API response status:', response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log('[grepTool] Graph API error:', errorText);
         return { success: false, error: `Search failed: ${response.statusText}` };
       }
 
       const data: { value: GraphEmail[] } = await response.json();
-      const emails = data.value || [];
+      let emails = data.value || [];
+
+      // Client-side: sort by date (newest first) since we can't use $orderby with $search
+      emails = emails.sort((a, b) => {
+        const dateA = new Date(a.receivedDateTime || 0);
+        const dateB = new Date(b.receivedDateTime || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      console.log('[grepTool] Found emails:', emails.length);
 
       return {
         success: true,
         data: {
           pattern,
           count: emails.length,
-          matches: emails.map(email => ({
-            id: email.id,
-            subject: email.subject,
-            from: `${email.from.emailAddress.name} <${email.from.emailAddress.address}>`,
-            date: email.receivedDateTime,
-            snippet: email.body?.content?.substring(0, 200) || '',
-          })),
+          matches: emails.map(email => {
+            // Convert HTML to plain text for snippet
+            let bodyText = email.body?.content || '';
+            if (email.body?.contentType === 'html' && bodyText) {
+              bodyText = htmlToText(bodyText);
+            }
+            return {
+              id: email.id,
+              subject: email.subject,
+              from: `${email.from.emailAddress.name} <${email.from.emailAddress.address}>`,
+              date: email.receivedDateTime,
+              snippet: bodyText.substring(0, 200),
+            };
+          }),
         },
       };
     } catch (error) {
+      console.log('[grepTool] Exception:', error);
       return { success: false, error: `Error searching emails: ${error}` };
     }
   },
@@ -251,9 +278,12 @@ export const fetchTool: Tool = {
         }
       }
 
+      // Add $count=true to get total count in response headers
       const url = filter
-        ? `${graphEndpoints.messages}?$filter=${encodeURIComponent(filter)}&$top=${limit}&$orderby=receivedDateTime desc`
-        : `${graphEndpoints.messages}?$top=${limit}&$orderby=receivedDateTime desc`;
+        ? `${graphEndpoints.messages}?$filter=${encodeURIComponent(filter)}&$top=${limit}&$orderby=receivedDateTime desc&$count=true`
+        : `${graphEndpoints.messages}?$top=${limit}&$orderby=receivedDateTime desc&$count=true`;
+
+      console.log('[fetchTool] Fetching emails:', { url, filter, limit });
 
       const response = await fetch(url, {
         headers: {
@@ -261,18 +291,28 @@ export const fetchTool: Tool = {
         },
       });
 
+      console.log('[fetchTool] Graph API response status:', response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log('[fetchTool] Graph API error:', errorText);
         return { success: false, error: `Fetch failed: ${response.statusText}` };
       }
 
-      const data: { value: GraphEmail[] } = await response.json();
+      const data: { value: GraphEmail[]; '@odata.count'?: number } = await response.json();
       const emails = data.value || [];
+      const totalCount = data['@odata.count'] ?? emails.length;
+
+      console.log('[fetchTool] Found emails:', emails.length, 'Total matching:', totalCount);
+      console.log('[fetchTool] Email subjects:', emails.map(e => e.subject));
 
       return {
         success: true,
         data: {
           criteria: { conversationId, sender, startDate, endDate },
-          count: emails.length,
+          returned: emails.length,
+          total: totalCount,
+          hasMore: totalCount > parseInt(limit),
           messages: emails.map(email => ({
             id: email.id,
             subject: email.subject,
@@ -282,6 +322,7 @@ export const fetchTool: Tool = {
         },
       };
     } catch (error) {
+      console.log('[fetchTool] Exception:', error);
       return { success: false, error: `Error fetching emails: ${error}` };
     }
   },
@@ -392,4 +433,13 @@ function globToRegex(glob: string): RegExp {
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.');
   return new RegExp(regexString, 'i');
+}
+
+/**
+ * Helper: Get date N months ago in ISO 8601 format
+ */
+function getDateMonthsAgo(months: number): string {
+  const date = new Date();
+  date.setMonth(date.getMonth() - months);
+  return date.toISOString().split('T')[0];
 }

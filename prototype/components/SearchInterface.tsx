@@ -11,9 +11,16 @@ interface ToolTraceEntry {
   timestamp: number;
 }
 
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface AgentResponse {
   answer: string;
   toolTrace: ToolTraceEntry[];
+  conversationHistory?: Message[];
+  toolResults?: Record<string, any>;
 }
 
 export function SearchInterface() {
@@ -22,6 +29,9 @@ export function SearchInterface() {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Conversation state
+  const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
+  const [toolResults, setToolResults] = useState<Record<string, any>>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +48,11 @@ export function SearchInterface() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          query,
+          conversationHistory,
+          previousToolResults: toolResults,
+        }),
       });
 
       if (!res.ok) {
@@ -53,6 +67,17 @@ export function SearchInterface() {
 
       const data: AgentResponse = await res.json();
       setResponse(data);
+
+      // Update conversation state for next request
+      if (data.conversationHistory) {
+        setConversationHistory(data.conversationHistory);
+      }
+      if (data.toolResults) {
+        setToolResults(data.toolResults);
+      }
+
+      // Clear the input after successful query
+      setQuery('');
     } catch (err) {
       setError('Failed to connect to the service');
     } finally {
