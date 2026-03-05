@@ -75,6 +75,13 @@ export const graphEndpoints = {
   me: 'https://graph.microsoft.com/v1.0/me',
   messages: 'https://graph.microsoft.com/v1.0/me/messages',
   sendMessage: 'https://graph.microsoft.com/v1.0/me/sendMail',
+  // Microsoft Search API for relevance-ranked email search
+  search: 'https://graph.microsoft.com/v1.0/search/query',
+  // Mail folder endpoints for searching different folders
+  sentItems: 'https://graph.microsoft.com/v1.0/me/mailFolders/SentItems/messages',
+  archive: 'https://graph.microsoft.com/v1.0/me/mailFolders/Archive/messages',
+  drafts: 'https://graph.microsoft.com/v1.0/me/mailFolders/Drafts/messages',
+  // OneDrive endpoints
   driveRoot: 'https://graph.microsoft.com/v1.0/me/drive/root',
   driveChildren: 'https://graph.microsoft.com/v1.0/me/drive/root/children',
 };

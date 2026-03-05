@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 interface ToolTraceEntry {
@@ -23,20 +23,75 @@ interface AgentResponse {
   toolResults?: Record<string, any>;
 }
 
+// Message bubble component
+function MessageBubble({ message }: { message: Message }) {
+  const isUser = message.role === 'user';
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
+        isUser
+          ? 'bg-blue-600 text-white'
+          : 'bg-gray-100 text-gray-900'
+      }`}>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+      </div>
+    </div>
+  );
+}
+
+// Typing indicator component
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="bg-gray-100 rounded-lg px-4 py-3">
+        <div className="flex space-x-1 items-center">
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SearchInterface() {
   const { authenticated } = useAuth();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   // Conversation state
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
   const [toolResults, setToolResults] = useState<Record<string, any>>({});
+
+  // Auto-scroll ref
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversationHistory, loading, response]);
+
+  // New topic handler
+  const handleNewTopic = () => {
+    setConversationHistory([]);
+    setToolResults({});
+    setResponse(null);
+    setQuery('');
+    setError(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!query.trim() || loading) return;
+
+    // Add user message immediately to UI
+    const userMessage: Message = { role: 'user', content: query };
+    setConversationHistory(prev => [...prev, userMessage]);
+    const currentQuery = query;
+    setQuery('');
 
     setLoading(true);
     setError(null);
@@ -49,8 +104,8 @@ export function SearchInterface() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query,
-          conversationHistory,
+          query: currentQuery,
+          conversationHistory: [...conversationHistory, userMessage],
           previousToolResults: toolResults,
         }),
       });
@@ -62,127 +117,125 @@ export function SearchInterface() {
         } else {
           setError(data.error || 'Failed to process query');
         }
+        // Remove user message on error
+        setConversationHistory(prev => prev.slice(0, -1));
+        setQuery(currentQuery);
         return;
       }
 
       const data: AgentResponse = await res.json();
       setResponse(data);
 
-      // Update conversation state for next request
+      // Update conversation state from server response
       if (data.conversationHistory) {
         setConversationHistory(data.conversationHistory);
       }
       if (data.toolResults) {
         setToolResults(data.toolResults);
       }
-
-      // Clear the input after successful query
-      setQuery('');
     } catch (err) {
       setError('Failed to connect to the service');
+      // Remove user message on error
+      setConversationHistory(prev => prev.slice(0, -1));
+      setQuery(currentQuery);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
-        <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
-          Search your emails
-        </label>
-        <div className="flex gap-3">
+    <div className="flex flex-col h-[600px] bg-white rounded-lg shadow-md border border-gray-200">
+      {/* Header with New Topic button */}
+      <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-800">Email Assistant</h2>
+        {(conversationHistory.length > 0 || toolResults && Object.keys(toolResults).length > 0) && (
+          <button
+            onClick={handleNewTopic}
+            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+          >
+            New Topic
+          </button>
+        )}
+      </div>
+
+      {/* Scrollable message area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {conversationHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="text-gray-400 mb-4">
+              <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              <p className="text-lg font-medium">Start a conversation</p>
+            </div>
+            <p className="text-sm text-gray-500 max-w-md">
+              Ask about your emails... (e.g., &quot;Show me emails from John about the project&quot;)
+            </p>
+          </div>
+        ) : (
+          <>
+            {conversationHistory.map((msg, i) => (
+              <MessageBubble key={i} message={msg} />
+            ))}
+            {loading && <TypingIndicator />}
+          </>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <input
-            id="search"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask about your emails... (e.g., 'Show me emails from John about the project')"
-            className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            placeholder="Ask about your emails..."
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             disabled={!authenticated || loading}
           />
           <button
             type="submit"
             disabled={!authenticated || !query.trim() || loading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Searching...' : 'Search'}
+            {loading ? '...' : 'Send'}
           </button>
-        </div>
+        </form>
         {!authenticated && (
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-xs text-gray-500 mt-2">
             Please login with Microsoft to enable search
           </p>
         )}
-      </form>
+      </div>
 
+      {/* Error display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="absolute bottom-20 left-4 right-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg">
           {error}
         </div>
       )}
 
-      {response && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-3">Answer</h3>
-            <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
-              {response.answer}
-            </div>
-          </div>
-
-          {response.toolTrace.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Tool Trace ({response.toolTrace.length} tools used)
-              </h3>
-              <div className="space-y-2">
-                {response.toolTrace.map((entry, index) => (
-                  <details key={index} className="bg-white rounded border border-gray-200">
-                    <summary className="px-3 py-2 cursor-pointer hover:bg-gray-50 flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        {index + 1}. {entry.tool}
-                        <span className="text-gray-500 font-normal ml-2">
-                          ({entry.duration}ms)
-                        </span>
-                      </span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        entry.outputs?.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {entry.outputs?.success ? 'Success' : 'Failed'}
-                      </span>
-                    </summary>
-                    <div className="px-3 py-2 border-t border-gray-200 text-xs">
-                      <div className="mb-2">
-                        <span className="font-medium">Inputs:</span>
-                        <pre className="mt-1 bg-gray-100 p-2 rounded overflow-x-auto">
-                          {JSON.stringify(entry.inputs, null, 2)}
-                        </pre>
-                      </div>
-                      <div>
-                        <span className="font-medium">Outputs:</span>
-                        <pre className="mt-1 bg-gray-100 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
-                          {JSON.stringify(entry.outputs, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  </details>
-                ))}
+      {/* Tool trace (collapsible, only show when there are results) */}
+      {response && response.toolTrace.length > 0 && (
+        <details className="mx-4 mt-2 text-xs">
+          <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+            Tool trace ({response.toolTrace.length} tools)
+          </summary>
+          <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+            {response.toolTrace.map((entry, index) => (
+              <div key={index} className="bg-gray-50 rounded p-2">
+                <span className={`px-1.5 py-0.5 rounded text-xs ${
+                  entry.outputs?.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {entry.tool}
+                </span>
+                <span className="text-gray-500 ml-2">({entry.duration}ms)</span>
               </div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        </details>
       )}
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-blue-900 mb-2">Example queries</h3>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>• &quot;Show me recent emails from John&quot;</li>
-          <li>• &quot;Find emails about the budget review&quot;</li>
-          <li>• &quot;What emails have I received this week?&quot;</li>
-          <li>• &quot;Summarize the thread about the project deadline&quot;</li>
-        </ul>
-      </div>
     </div>
   );
 }

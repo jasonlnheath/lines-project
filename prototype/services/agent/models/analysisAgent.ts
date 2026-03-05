@@ -18,7 +18,7 @@ export interface OODAResult {
 }
 
 export interface SearchSuggestion {
-  tool: 'grep' | 'fetch' | 'glob';
+  tool: 'search' | 'fetch' | 'glob';
   args: Record<string, any>;
   rationale: string;
 }
@@ -88,22 +88,33 @@ export class AnalysisAgent extends GLMClient {
       for (const [key, email] of readEmails.slice(0, 5)) {
         const emailDate = email.date ? email.date.split('T')[0] : 'unknown date';
         observations.push(`  - From: ${email.from} | Date: ${emailDate} | Subject: ${email.subject || '(no subject)'}`);
-        const bodyPreview = email.body?.substring(0, 100) || '';
+        // Include more email body for proper analysis - up to 2000 chars
+        const bodyPreview = email.body?.substring(0, 2000) || '';
         if (bodyPreview) {
-          observations.push(`    Preview: ${bodyPreview}...`);
+          observations.push(`    Body: ${bodyPreview}${email.body && email.body.length > 2000 ? '\n    [...truncated...]' : ''}`);
         }
       }
     }
 
-    // Check search results (grep/glob/fetch) - handle multiple results from same tool
+    // Check search results (search/grep/glob/fetch) - handle multiple results from same tool
     const searchResults = Object.entries(toolResults).filter(([key]) =>
-      !key.startsWith('read_') && (key.startsWith('grep') || key.startsWith('glob') || key.startsWith('fetch'))
+      !key.startsWith('read_') && (key.startsWith('search') || key.startsWith('grep') || key.startsWith('glob') || key.startsWith('fetch'))
     );
 
     if (searchResults.length > 0) {
       observations.push('\nSEARCH RESULTS:');
       for (const [tool, result] of searchResults) {
-        if (tool.startsWith('grep') || tool.startsWith('glob')) {
+        if (tool.startsWith('search')) {
+          const count = result.totalResults || result.results?.length || 0;
+          const query = result.query || 'unknown';
+          observations.push(`  - ${tool}: Found ${count} emails matching "${query}"`);
+          // Show first few matches
+          const results = result.results || [];
+          for (const item of results.slice(0, 3)) {
+            const itemDate = item.date ? item.date.split('T')[0] : '';
+            observations.push(`    • ${item.from} | ${itemDate} | ${item.subject || '(no subject)'}`);
+          }
+        } else if (tool.startsWith('grep') || tool.startsWith('glob')) {
           const pattern = result.pattern || result.subjectPattern || 'unknown';
           const count = result.count || 0;
           observations.push(`  - ${tool}: Found ${count} emails matching "${pattern}"`);
@@ -155,7 +166,8 @@ Provide a concise orientation (2-3 paragraphs).`;
     ];
 
     try {
-      const response = await this.callGLM(messages, 1500, 0.7);
+      // Increased tokens to handle longer observations with full email content
+      const response = await this.callGLM(messages, 2500, 0.7);
       return response.content;
     } catch (error) {
       console.error('[AnalysisAgent] Error in ORIENT phase:', error);
@@ -187,8 +199,8 @@ Provide a concise orientation (2-3 paragraphs).`;
     ];
 
     try {
-      // Use more tokens for decision to ensure complete JSON response
-      const response = await this.callGLM(messages, 800, 0.3);
+      // Use more tokens for decision to handle larger observations and ensure complete JSON response
+      const response = await this.callGLM(messages, 2000, 0.3);
       const decision = response.content.trim().toUpperCase();
 
       console.log('[AnalysisAgent] DECISION:', decision);
@@ -248,7 +260,8 @@ SYNTHESIZE: Provide a comprehensive synthesis of all findings that directly answ
     ];
 
     try {
-      const response = await this.callGLM(messages, 2000, 0.7);
+      // Increased tokens to handle more email content for proper synthesis
+      const response = await this.callGLM(messages, 3000, 0.7);
       return response.content;
     } catch (error) {
       console.error('[AnalysisAgent] Error in SYNTHESIZE phase:', error);
@@ -261,28 +274,9 @@ SYNTHESIZE: Provide a comprehensive synthesis of all findings that directly answ
    * Keep enough context to determine if emails are relevant to the query
    */
   private simplifyObservations(observations: string): string {
-    // Extract key info: what we found, dates, key people, AND content relevance
-    const lines = observations.split('\n');
-    const simplified: string[] = [];
-
-    for (const line of lines) {
-      // Keep summary lines
-      if (line.includes('EMAILS READ') || line.includes('SEARCH RESULTS') || line.includes('Found')) {
-        simplified.push(line);
-      }
-      // Keep match lines with sender/date/subject
-      if (line.includes('•') || line.includes('- From:') || line.includes('| Date:')) {
-        simplified.push(line);
-      }
-      // Keep preview lines - they're CRITICAL to determine relevance!
-      if (line.includes('Preview:')) {
-        simplified.push(line);
-      }
-      // Limit total lines (increased from 10 to 20 to capture previews)
-      if (simplified.length >= 20) break;
-    }
-
-    return simplified.join('\n');
+    // Don't simplify - pass full observations to decision model
+    // The decision model needs full context to determine if relevant emails were found
+    return observations;
   }
 
   /**
@@ -320,9 +314,11 @@ SYNTHESIZE: Provide a comprehensive synthesis of all findings that directly answ
       if (parsed.searches && Array.isArray(parsed.searches)) {
         for (const search of parsed.searches) {
           if (search.tool && (search.query || search.args)) {
+            // For 'search' tool, ensure args format is correct
+            const args = search.args || (search.query ? { query: search.query } : {});
             suggestions.push({
               tool: search.tool,
-              args: search.args || { query: search.query },
+              args,
               rationale: search.rationale || '',
             });
           }
@@ -352,11 +348,11 @@ SYNTHESIZE: Provide a comprehensive synthesis of all findings that directly answ
       console.log('[AnalysisAgent] Found plain text recommendation:', recommendation);
 
       // Try to extract search terms and tools from the recommendation
-      const grepMatch = recommendation.match(/(?:grep|search|search for)\s+["']?([^"'\n]+)["']?/i);
-      if (grepMatch) {
+      const searchMatch = recommendation.match(/(?:search|search for)\s+["']?([^"'\n]+)["']?/i);
+      if (searchMatch) {
         suggestions.push({
-          tool: 'grep',
-          args: { pattern: grepMatch[1].trim() },
+          tool: 'search',
+          args: { query: searchMatch[1].trim() },
           rationale: recommendation,
         });
       }

@@ -70,9 +70,26 @@ export interface Message {
 
 /**
  * Email data types from Microsoft Graph API
+ *
+ * Microsoft Graph Thread Properties for Deduplication:
+ * - conversationId: Groups emails in same thread - PRIMARY KEY for deduplication
+ * - conversationIndex: Position within thread (binary, for sorting)
+ * - uniqueBody: Only NEW content (excludes quotes/replies!) - AVOID DUPLICATE READING
+ * - bodyPreview: First 255 chars, text format - USE FOR PREVIEWS
+ * - internetMessageId: RFC2822 message ID - alternative unique identifier
  */
 export interface GraphEmail {
   id: string;
+  // Microsoft Graph thread properties for deduplication
+  conversationId?: string;        // Thread identifier - groups emails in same conversation
+  conversationIndex?: string;     // Position in thread (binary, for sorting)
+  internetMessageId?: string;     // RFC2822 message ID
+  uniqueBody?: {                  // Only new content, excludes quoted replies!
+    contentType: string;
+    content: string;
+  };
+  bodyPreview?: string;           // First 255 chars, text format - USE FOR PREVIEWS
+  // Standard email properties
   subject: string;
   from: {
     emailAddress: {
@@ -87,7 +104,7 @@ export interface GraphEmail {
     };
   }[];
   receivedDateTime: string;
-  body?: {
+  body?: {                        // Full body (includes quoted content)
     contentType: string;
     content: string;
   };

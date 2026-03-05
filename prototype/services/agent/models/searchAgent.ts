@@ -45,7 +45,8 @@ export class SearchAgent extends GLMClient {
     ];
 
     try {
-      const response = await this.callGLM(messages, 500, 0.3);
+      // Increased tokens to ensure full folder search prompt is included
+      const response = await this.callGLM(messages, 1000, 0.3);
 
       // Parse JSON array from response
       const jsonMatch = response.content.match(/\[[\s\S]*\]/);

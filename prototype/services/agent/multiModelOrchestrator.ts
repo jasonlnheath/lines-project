@@ -48,6 +48,22 @@ export class MultiModelOrchestrator {
     const toolResults: Record<string, any> = { ...query.previousToolResults };
     const oodaInsights: OODAInsight[] = [];
 
+    // Track conversations and emails already read across rounds for deduplication
+    const readConversations = new Set<string>();
+    const readEmails = new Set<string>();
+
+    // Initialize with previously read emails
+    for (const [key, email] of Object.entries(toolResults)) {
+      if (key.startsWith('read_')) {
+        readEmails.add(key.substring(5)); // Extract email ID from 'read_' prefix
+        if (email.conversationId) {
+          readConversations.add(email.conversationId);
+        }
+      }
+    }
+
+    console.log(`[MultiModelOrchestrator] Starting with ${readEmails.size} already-read emails, ${readConversations.size} conversations`);
+
     // Context for tool execution
     const context = {
       accessToken: query.accessToken,
@@ -70,7 +86,7 @@ export class MultiModelOrchestrator {
         await this.executeSearches(researchPlan.searches, context, toolTrace, toolResults);
 
         // Step 2b: Auto-read top emails from search results
-        await this.autoReadTopEmails(toolResults, toolTrace, context);
+        await this.autoReadTopEmails(toolResults, toolTrace, context, readConversations, readEmails);
 
         // Step 2c: OODA analysis (GLM-4.7)
         const oodaResult = await this.analysisAgent.performOODALoop(
@@ -202,7 +218,7 @@ export class MultiModelOrchestrator {
           const resultKey = count === 0 ? search.tool : `${search.tool}_${count + 1}`;
           toolResults[resultKey] = result.data;
 
-          console.log(`[MultiModelOrchestrator] Stored result as: ${resultKey}, found: ${result.data?.count || result.data?.total || 0} results`);
+          console.log(`[MultiModelOrchestrator] Stored result as: ${resultKey}, found: ${result.data?.count || result.data?.totalResults || result.data?.total || 0} results`);
         }
       } catch (error) {
         console.error(`[MultiModelOrchestrator] Error executing ${search.tool}:`, error);
@@ -219,47 +235,204 @@ export class MultiModelOrchestrator {
 
   /**
    * Auto-read top emails from search results
+   * Implements conversation-aware reading using Microsoft Graph conversationId
+   * to avoid reading duplicate emails from the same thread
+   * Also tracks already-read conversations/emails across rounds
    */
   private async autoReadTopEmails(
     toolResults: Record<string, any>,
     toolTrace: ToolTraceEntry[],
-    context: { accessToken: string; userId: string }
+    context: { accessToken: string; userId: string },
+    readConversations: Set<string>,
+    readEmails: Set<string>
   ): Promise<void> {
-    const emailsToRead: string[] = [];
+    // Track emails by conversation for thread-aware reading
+    const emailsByConversation = new Map<string, Array<{ id: string; date: string }>>();
+    const emailsWithoutConversation: string[] = [];
+
+    // Stats for deduplication
+    let skippedAlreadyRead = 0;
+    let skippedInRound = 0;
 
     // Extract email IDs from ALL search results (including multiple results from same tool)
     for (const [key, result] of Object.entries(toolResults)) {
       // Skip read emails and non-search results
       if (key.startsWith('read_')) continue;
 
+      // Handle search results (search, search_2, search_3, etc.)
+      if (key.startsWith('search')) {
+        const results = result.results || [];
+        console.log(`[MultiModelOrchestrator] Processing ${key}: found ${results.length} results`);
+        // Debug: Log first result structure
+        if (results.length > 0) {
+          console.log(`[MultiModelOrchestrator] First result sample:`, JSON.stringify({
+            id: results[0].id,
+            conversationId: results[0].conversationId,
+            hasId: !!results[0].id,
+            hasConversationId: !!results[0].conversationId,
+          }));
+        }
+        for (const item of results.slice(0, 5)) {
+          if (item.id) {
+            // Skip if already read in a previous round
+            if (readEmails.has(item.id)) {
+              skippedAlreadyRead++;
+              continue;
+            }
+
+            if (item.conversationId) {
+              // Skip if this conversation was already read in a previous round
+              if (readConversations.has(item.conversationId)) {
+                skippedAlreadyRead++;
+                continue;
+              }
+
+              // Group by conversation (within this round)
+              if (!emailsByConversation.has(item.conversationId)) {
+                emailsByConversation.set(item.conversationId, []);
+              }
+              emailsByConversation.get(item.conversationId)!.push({ id: item.id, date: item.date });
+              console.log(`[MultiModelOrchestrator] Added to conversation ${item.conversationId.substring(0, 8)}: ${item.id}`);
+            } else {
+              if (!emailsWithoutConversation.includes(item.id)) {
+                emailsWithoutConversation.push(item.id);
+                console.log(`[MultiModelOrchestrator] Added email without conversationId: ${item.id}`);
+              }
+            }
+          } else {
+            console.log(`[MultiModelOrchestrator] Skipping item without id:`, JSON.stringify(item).substring(0, 200));
+          }
+        }
+      }
       // Handle grep results (grep, grep_2, grep_3, etc.)
-      if (key.startsWith('grep')) {
+      else if (key.startsWith('grep')) {
         const matches = result.matches || [];
-        for (const match of matches.slice(0, 3)) {
-          if (match.id && !emailsToRead.includes(match.id)) {
-            emailsToRead.push(match.id);
+        for (const match of matches.slice(0, 5)) {
+          if (match.id) {
+            // Skip if already read
+            if (readEmails.has(match.id)) {
+              skippedAlreadyRead++;
+              continue;
+            }
+
+            if (match.conversationId) {
+              // Skip if conversation already read
+              if (readConversations.has(match.conversationId)) {
+                skippedAlreadyRead++;
+                continue;
+              }
+
+              if (!emailsByConversation.has(match.conversationId)) {
+                emailsByConversation.set(match.conversationId, []);
+              }
+              emailsByConversation.get(match.conversationId)!.push({ id: match.id, date: match.date });
+            } else {
+              if (!emailsWithoutConversation.includes(match.id)) {
+                emailsWithoutConversation.push(match.id);
+              }
+            }
           }
         }
       }
       // Handle glob results (glob, glob_2, etc.)
       else if (key.startsWith('glob')) {
         const matches = result.matches || [];
-        for (const match of matches.slice(0, 3)) {
-          if (match.id && !emailsToRead.includes(match.id)) {
-            emailsToRead.push(match.id);
+        for (const match of matches.slice(0, 5)) {
+          if (match.id) {
+            // Skip if already read
+            if (readEmails.has(match.id)) {
+              skippedAlreadyRead++;
+              continue;
+            }
+
+            if (match.conversationId) {
+              // Skip if conversation already read
+              if (readConversations.has(match.conversationId)) {
+                skippedAlreadyRead++;
+                continue;
+              }
+
+              if (!emailsByConversation.has(match.conversationId)) {
+                emailsByConversation.set(match.conversationId, []);
+              }
+              emailsByConversation.get(match.conversationId)!.push({ id: match.id, date: match.date });
+            } else {
+              if (!emailsWithoutConversation.includes(match.id)) {
+                emailsWithoutConversation.push(match.id);
+              }
+            }
           }
         }
       }
       // Handle fetch results (fetch, fetch_2, etc.)
       else if (key.startsWith('fetch')) {
         const messages = result.messages || [];
-        for (const msg of messages.slice(0, 3)) {
-          if (msg.id && !emailsToRead.includes(msg.id)) {
-            emailsToRead.push(msg.id);
+        for (const msg of messages.slice(0, 5)) {
+          if (msg.id) {
+            // Skip if already read
+            if (readEmails.has(msg.id)) {
+              skippedAlreadyRead++;
+              continue;
+            }
+
+            if (msg.conversationId) {
+              // Skip if conversation already read
+              if (readConversations.has(msg.conversationId)) {
+                skippedAlreadyRead++;
+                continue;
+              }
+
+              if (!emailsByConversation.has(msg.conversationId)) {
+                emailsByConversation.set(msg.conversationId, []);
+              }
+              emailsByConversation.get(msg.conversationId)!.push({ id: msg.id, date: msg.date });
+            } else {
+              if (!emailsWithoutConversation.includes(msg.id)) {
+                emailsWithoutConversation.push(msg.id);
+              }
+            }
           }
         }
       }
     }
+
+    // Log conversation statistics
+    const totalConversations = emailsByConversation.size;
+    const totalEmailsInConversations = Array.from(emailsByConversation.values()).reduce((sum, emails) => sum + emails.length, 0);
+    const totalEmailsToRead = totalEmailsInConversations + emailsWithoutConversation.length;
+
+    // Debug: Log all keys in toolResults
+    console.log(`[MultiModelOrchestrator] toolResults keys:`, Object.keys(toolResults).join(', '));
+    console.log(`[MultiModelOrchestrator] Conversation-aware reading: ${totalConversations} new conversations, ${totalEmailsInConversations} new emails, ${emailsWithoutConversation.length} without conversation ID`);
+    console.log(`[MultiModelOrchestrator] Deduplication: Skipped ${skippedAlreadyRead} already-read emails across rounds`);
+    console.log(`[MultiModelOrchestrator] Total new emails to read: ${totalEmailsToRead}`);
+
+    // For each conversation, only read the latest 1-2 emails
+    const emailsToRead: string[] = [];
+    for (const [conversationId, emails] of emailsByConversation) {
+      // Sort by date (newest first)
+      emails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      // Only read latest 2 emails per conversation to avoid reading quoted content
+      const latestEmails = emails.slice(0, 2);
+      for (const email of latestEmails) {
+        if (!emailsToRead.includes(email.id)) {
+          emailsToRead.push(email.id);
+        }
+      }
+    }
+
+    // Add emails without conversation ID (up to 5)
+    for (const emailId of emailsWithoutConversation.slice(0, 5)) {
+      if (!emailsToRead.includes(emailId)) {
+        emailsToRead.push(emailId);
+      }
+    }
+
+    // Log deduplication statistics
+    const totalEmailsFound = totalEmailsInConversations + emailsWithoutConversation.length;
+    const duplicatesAvoided = totalEmailsFound - emailsToRead.length;
+    console.log(`[MultiModelOrchestrator] Conversation deduplication: reading ${emailsToRead.length} of ${totalEmailsFound} emails, avoided ${duplicatesAvoided} duplicates`);
 
     // Read emails
     const readTool = toolRegistry['read'];
@@ -280,6 +453,11 @@ export class MultiModelOrchestrator {
 
         if (result.success) {
           toolResults[`read_${emailId}`] = result.data;
+          // Mark as read for cross-round deduplication
+          readEmails.add(emailId);
+          if (result.data.conversationId) {
+            readConversations.add(result.data.conversationId);
+          }
         }
       } catch (error) {
         console.error(`[MultiModelOrchestrator] Error reading email ${emailId}:`, error);
@@ -287,16 +465,17 @@ export class MultiModelOrchestrator {
     }
 
     if (emailsToRead.length > 0) {
-      console.log(`[MultiModelOrchestrator] Auto-read ${emailsToRead.length} emails`);
+      console.log(`[MultiModelOrchestrator] Auto-read ${emailsToRead.length} emails (conversation-aware)`);
+      console.log(`[MultiModelOrchestrator] Total read emails so far: ${readEmails.size}, conversations: ${readConversations.size}`);
     }
   }
 
   /**
    * Synthesize search plans from OODA result
    */
-  private synthesizeSearchPlans(oodaResult: OODAResult): Array<{ tool: 'grep' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> {
+  private synthesizeSearchPlans(oodaResult: OODAResult): Array<{ tool: 'search' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> {
     // Extract search suggestions from OODA decision/synthesis
-    const plans: Array<{ tool: 'grep' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> = [];
+    const plans: Array<{ tool: 'search' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> = [];
 
     // Use suggested searches from analysis agent
     for (const suggestion of oodaResult.suggestedSearches) {
@@ -317,15 +496,53 @@ export class MultiModelOrchestrator {
         const term = match[1]?.trim();
         if (term && term.length > 2) {
           plans.push({
-            tool: 'grep',
-            args: { pattern: term, limit: '5' },
+            tool: 'search',
+            args: { query: term, limit: '5' },
             rationale: `Search for mentions of ${term}`,
           });
         }
       }
     }
 
-    return plans;
+    // Ensure all searches have folder coverage (inbox + sent)
+    return this.ensureFolderCoverage(plans);
+  }
+
+  /**
+   * Ensure all searches have folder coverage (inbox + sent)
+   * Note: search tool automatically handles both folders, so skip it
+   */
+  private ensureFolderCoverage(searches: Array<{ tool: 'search' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }>): Array<{ tool: 'search' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> {
+    const processed: Array<{ tool: 'search' | 'fetch' | 'glob'; args: Record<string, any>; rationale: string }> = [];
+
+    for (const search of searches) {
+      // search tool automatically handles both folders, skip folder coverage
+      if (search.tool === 'search') {
+        processed.push(search);
+        continue;
+      }
+
+      const hasFolder = search.args && search.args.folder;
+
+      if (hasFolder) {
+        // Already has folder, keep as-is
+        processed.push(search);
+      } else {
+        // No folder specified, create both inbox and sent versions
+        processed.push({
+          ...search,
+          args: { ...search.args, folder: 'inbox' },
+          rationale: search.rationale + ' (inbox)',
+        });
+        processed.push({
+          ...search,
+          args: { ...search.args, folder: 'sent' },
+          rationale: search.rationale + ' (sent)',
+        });
+      }
+    }
+
+    return processed;
   }
 
   /**

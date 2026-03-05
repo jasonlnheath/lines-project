@@ -14,7 +14,7 @@ export interface ResearchPlan {
 }
 
 export interface SearchSuggestion {
-  tool: 'grep' | 'fetch' | 'glob';
+  tool: 'search' | 'fetch' | 'glob';
   args: Record<string, any>;
   rationale: string;
 }
@@ -61,17 +61,22 @@ REASONING: [your strategic reasoning]
 
 SEARCHES:
 [
-  {"tool": "grep", "args": {"pattern": "keyword", "limit": "10"}, "rationale": "why this search"},
-  {"tool": "fetch", "args": {"sender": "email@example.com", "limit": "20"}, "rationale": "why this search"}
+  {"tool": "search", "args": {"query": "KQL query string"}, "rationale": "why this search"},
+  {"tool": "fetch", "args": {"sender": "email@example.com", "folder": "inbox", "limit": "20"}, "rationale": "why this search"}
 ]
 
 IMPORTANT:
+- Use "search" tool with KQL syntax for content searches
+- The search tool automatically searches BOTH inbox AND sent folders
+- KQL examples: "from:john@example.com", "subject:project", "body:meeting", "importance:high"
+- For fetch tool, still include "folder" parameter
 - Use "args" with OBJECT, NOT STRING
-- DO NOT use "query" parameter - use "args" object
+- DO NOT use "query" parameter for search tool - use "args" object
 - Examples:
-  - grep: {"args": {"pattern": "TMC", "limit": "10"}}
-  - fetch: {"args": {"sender": "john@example.com", "limit": "20"}}
-  - glob: {"args": {"subjectPattern": "*invoice*", "limit": "10"}}`;
+  - search: {"args": {"query": "from:TMC"}}
+  - search: {"args": {"query": "subject:project"}}
+  - search: {"args": {"query": "from:john importance:high"}}
+  - fetch: {"args": {"sender": "john@example.com", "folder": "inbox", "limit": "20"}}`;
 
     const messages: GLMMessage[] = [
       { role: 'system', content: systemPrompt },
@@ -79,16 +84,66 @@ IMPORTANT:
     ];
 
     try {
-      const response = await this.callGLM(messages, 1000, 0.7);
-      return this.parseResearchPlan(response.content);
+      const response = await this.callGLM(messages, 1500, 0.7);
+      const plan = this.parseResearchPlan(response.content);
+
+      // Post-process: Ensure all searches have folder parameter
+      // If searches are missing folder, automatically create inbox+sent versions
+      const processedSearches = this.ensureFolderCoverage(plan.searches);
+
+      return {
+        searches: processedSearches,
+        reasoning: plan.reasoning,
+      };
     } catch (error) {
       console.error('[Orchestrator] Error planning research:', error);
-      // Fallback: simple grep search with proper args format
+      // Fallback: simple search with KQL format for both folders
       return {
-        searches: [{ tool: 'grep', args: { pattern: query, limit: '10' }, rationale: 'Direct search for query terms' }],
+        searches: [
+          { tool: 'search', args: { query: query }, rationale: 'Direct search for query terms' },
+        ],
         reasoning: 'Fallback due to error: search for query terms directly.',
       };
     }
+  }
+
+  /**
+   * Ensure all searches have folder coverage (inbox + sent)
+   * Post-process parsed searches to add missing folder parameters
+   * Note: search tool automatically searches both folders, so skip it
+   */
+  private ensureFolderCoverage(searches: SearchSuggestion[]): SearchSuggestion[] {
+    const processed: SearchSuggestion[] = [];
+
+    for (const search of searches) {
+      // search tool automatically handles both folders, skip folder coverage
+      if (search.tool === 'search') {
+        processed.push(search);
+        continue;
+      }
+
+      const hasFolder = search.args && search.args.folder;
+
+      if (hasFolder) {
+        // Already has folder, keep as-is
+        processed.push(search);
+      } else {
+        // No folder specified, create both inbox and sent versions
+        const inboxSearch = {
+          ...search,
+          args: { ...search.args, folder: 'inbox' },
+          rationale: search.rationale + ' (inbox)',
+        };
+        const sentSearch = {
+          ...search,
+          args: { ...search.args, folder: 'sent' },
+          rationale: search.rationale + ' (sent)',
+        };
+        processed.push(inboxSearch, sentSearch);
+      }
+    }
+
+    return processed;
   }
 
   /**
@@ -174,29 +229,33 @@ Remember: We want to maximize quality, but avoid endless research.`;
     // Add all read emails (limit to avoid token bloat)
     const readEmails = Object.entries(toolResults).filter(([key]) => key.startsWith('read_'));
     if (readEmails.length > 0) {
-      // Limit to 15 most recent emails and truncate bodies
-      const limitedEmails = readEmails.slice(0, 15);
+      // Include up to 20 most recent emails with more body content
+      const limitedEmails = readEmails.slice(0, 20);
       context += `\nEMAILS READ (${limitedEmails.length} of ${readEmails.length} total):\n\n`;
       for (const [key, email] of limitedEmails) {
         const emailDate = email.date ? email.date.split('T')[0] : 'unknown';
-        // Truncate body to 2000 chars to control token usage
-        const bodyPreview = email.body ? email.body.substring(0, 2000) : '';
+        // Include up to 4000 chars per email for full detail analysis
+        const bodyPreview = email.body ? email.body.substring(0, 4000) : '';
         context += `---\n`;
         context += `From: ${email.from}\n`;
         context += `Date: ${emailDate}\n`;
         context += `Subject: ${email.subject || '(no subject)'}\n`;
-        context += `Body:\n${bodyPreview}${email.body && email.body.length > 2000 ? '\n[...truncated...]' : ''}\n\n`;
+        context += `Body:\n${bodyPreview}${email.body && email.body.length > 4000 ? '\n[...truncated...]' : ''}\n\n`;
       }
     }
 
     // Add search result summaries (handle multiple results from same tool)
     const searchResults = Object.entries(toolResults).filter(([key]) =>
-      !key.startsWith('read_') && (key.startsWith('grep') || key.startsWith('glob') || key.startsWith('fetch'))
+      !key.startsWith('read_') && (key.startsWith('search') || key.startsWith('grep') || key.startsWith('glob') || key.startsWith('fetch'))
     );
     if (searchResults.length > 0) {
       context += `SEARCH RESULTS:\n`;
       for (const [tool, result] of searchResults) {
-        if (tool.startsWith('grep') || tool.startsWith('glob')) {
+        if (tool.startsWith('search')) {
+          const query = result.query || 'unknown';
+          const count = result.totalResults || result.results?.length || 0;
+          context += `- ${tool}: Found ${count} emails matching "${query}"\n`;
+        } else if (tool.startsWith('grep') || tool.startsWith('glob')) {
           const pattern = result.pattern || result.subjectPattern || 'unknown';
           context += `- ${tool}: Found ${result.count} emails matching "${pattern}"\n`;
         } else if (tool.startsWith('fetch')) {
@@ -211,7 +270,8 @@ Remember: We want to maximize quality, but avoid endless research.`;
     ];
 
     try {
-      const response = await this.callGLM(messages, 4000, 0.7);
+      // Increased tokens to handle more email content for detailed analysis
+      const response = await this.callGLM(messages, 6000, 0.7);
       return response.content;
     } catch (error) {
       console.error('[Orchestrator] Error generating answer:', error);
