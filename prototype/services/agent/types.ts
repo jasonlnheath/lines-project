@@ -3,6 +3,15 @@
  * Core types for the agent-based search system
  */
 
+// Re-export graph types for convenience
+export type {
+  EmailNode,
+  TopicCluster,
+} from '../graph/types';
+
+// SemanticAnalysis is defined in embedding service
+export type { SemanticAnalysis } from '../graph/topicMapping/embeddingService';
+
 export interface Tool {
   name: string;
   description: string;

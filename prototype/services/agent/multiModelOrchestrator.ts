@@ -7,7 +7,8 @@ import { GLM5Orchestrator, OODAInsight } from './models/orchestrator';
 import { SearchAgent } from './models/searchAgent';
 import { AnalysisAgent, OODAResult } from './models/analysisAgent';
 import { UserPersona } from './persona/personaTypes';
-import { AgentQuery, AgentResponse, ToolTraceEntry, toolRegistry } from './types';
+import { AgentQuery, AgentResponse, ToolTraceEntry, toolRegistry, EmailNode } from './types';
+import { GraphStorageManager } from '../graph/storage/graphStorageManager';
 
 export interface MultiModelConfig {
   persona?: UserPersona | null;
@@ -436,6 +437,9 @@ export class MultiModelOrchestrator {
 
     // Read emails
     const readTool = toolRegistry['read'];
+    const graphStorage = new GraphStorageManager(context.userId);
+    const emailsAddedToGraph: string[] = [];
+
     for (const emailId of emailsToRead) {
       // Skip if already read
       if (toolResults[`read_${emailId}`]) continue;
@@ -458,10 +462,45 @@ export class MultiModelOrchestrator {
           if (result.data.conversationId) {
             readConversations.add(result.data.conversationId);
           }
+
+          // Add email to knowledge graph
+          try {
+            const emailNode: EmailNode = {
+              id: result.data.id,
+              conversationId: result.data.conversationId || '',
+              subject: result.data.subject,
+              from: result.data.from,
+              to: result.data.to ? result.data.to.split(', ') : [],
+              date: result.data.date,
+              body: result.data.body,
+              bodyPreview: result.data.bodyPreview || result.data.body?.substring(0, 255) || '',
+              importance: result.data.importance || 'normal',
+              hasAttachments: result.data.hasAttachments || false,
+
+              // Graph-specific fields (will be populated by embedding service)
+              topics: [],
+              keywords: [],
+              entities: [], // Will be populated by embedding service
+
+              indexedAt: Date.now(),
+              lastAccessed: Date.now(),
+              accessCount: 1,
+            };
+
+            await graphStorage.addEmail(emailNode);
+            emailsAddedToGraph.push(emailId);
+          } catch (graphError) {
+            console.warn(`[MultiModelOrchestrator] Failed to add email ${emailId} to graph:`, graphError);
+            // Don't fail the query if graph integration fails
+          }
         }
       } catch (error) {
         console.error(`[MultiModelOrchestrator] Error reading email ${emailId}:`, error);
       }
+    }
+
+    if (emailsAddedToGraph.length > 0) {
+      console.log(`[MultiModelOrchestrator] Added ${emailsAddedToGraph.length} emails to knowledge graph`);
     }
 
     if (emailsToRead.length > 0) {

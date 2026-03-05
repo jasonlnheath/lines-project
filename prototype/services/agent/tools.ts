@@ -3,7 +3,7 @@
  * Core tools for email search and retrieval
  */
 
-import { Tool, ToolContext, ToolResult, GraphEmail } from './types';
+import { Tool, ToolContext, ToolResult, GraphEmail, TopicCluster } from './types';
 import { graphEndpoints } from '../msalConfig';
 
 /**
@@ -641,6 +641,82 @@ async function searchWithQueryParameter(
 }
 
 /**
+ * Topic Explore tool - Search topic clusters to find related conversations
+ */
+export const topicExploreTool: Tool = {
+  name: 'topic_explore',
+  description: 'Explore topic clusters to find related conversations even when subjects differ. This tool searches the email knowledge graph for groups of semantically related emails, showing subject mutations and email counts. Use this to discover connections across conversations that may have different subject lines but discuss the same topic.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      topic: {
+        type: 'string',
+        description: 'Topic keyword or phrase to search for in cluster names and descriptions',
+      },
+      limit: {
+        type: 'string',
+        description: 'Maximum number of clusters to return (default: 10)',
+      },
+    },
+    required: [],
+  },
+  handler: async ({ topic, limit = '10' }, context): Promise<ToolResult> => {
+    try {
+      console.log('[topicExploreTool] Exploring topic clusters:', { topic, limit });
+
+      const response = await fetch('/api/graph/topics', {
+        headers: {
+          Authorization: `Bearer ${context.accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Failed to fetch topic clusters: ${response.statusText}` };
+      }
+
+      const data = await response.json();
+      let clusters = data.clusters || [];
+
+      // Filter by topic keyword if provided
+      if (topic) {
+        const topicLower = topic.toLowerCase();
+        clusters = clusters.filter((cluster: TopicCluster) =>
+          cluster.name.toLowerCase().includes(topicLower) ||
+          cluster.description.toLowerCase().includes(topicLower) ||
+          cluster.subjectVariations.some((s: string) => s.toLowerCase().includes(topicLower))
+        );
+      }
+
+      // Apply limit
+      clusters = clusters.slice(0, parseInt(limit));
+
+      console.log(`[topicExploreTool] Found ${clusters.length} topic clusters`);
+
+      return {
+        success: true,
+        data: {
+          topic,
+          totalResults: clusters.length,
+          clusters: clusters.map((cluster: TopicCluster) => ({
+            id: cluster.id,
+            name: cluster.name,
+            description: cluster.description,
+            emailCount: cluster.emailIds.length,
+            subjectVariations: cluster.subjectVariations,
+            confidence: cluster.confidence,
+            dateRange: `${new Date(cluster.firstEmailDate).toLocaleDateString()} — ${new Date(cluster.lastEmailDate).toLocaleDateString()}`,
+            userConfirmed: cluster.userConfirmed,
+          })),
+        },
+      };
+    } catch (error) {
+      console.error('[topicExploreTool] Exception:', error);
+      return { success: false, error: `Error exploring topic clusters: ${error}` };
+    }
+  },
+};
+
+/**
  * Registry of all available tools
  */
 export const toolRegistry: Record<string, Tool> = {
@@ -649,6 +725,7 @@ export const toolRegistry: Record<string, Tool> = {
   glob: globTool,
   fetch: fetchTool,
   summarize: summarizeTool,
+  topic_explore: topicExploreTool,
 };
 
 /**
