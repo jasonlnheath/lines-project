@@ -1,31 +1,17 @@
 /**
  * Topic Cluster View Component
  *
- * Displays topic clusters from the email knowledge graph.
- * Shows cluster name, email count, subject variations, and confidence score.
- *
- * This component enables users to explore emails grouped by semantic topics,
- * even when the subject lines differ.
+ * Enhanced view with timeline visualization for exploring email clusters.
+ * Shows cluster sidebar and timeline with message bubbles, connections, and auto-zoom.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-
-interface TopicCluster {
-  id: string;
-  name: string;
-  description: string;
-  emailIds: string[];
-  subjectVariations: string[];
-  firstEmailDate: string;
-  lastEmailDate: string;
-  confidence: number;
-  userConfirmed?: boolean;
-  userRejected?: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
+import { ClusterSidebar } from './ClusterSidebar';
+import { TimelineView } from './TimelineView';
+import { useTimelineData } from '@/hooks/useTimelineData';
+import { TopicCluster } from '@/services/graph/types';
 
 interface TopicClusterViewProps {
   onClusterClick?: (cluster: TopicCluster) => void;
@@ -35,12 +21,38 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
   const [clusters, setClusters] = useState<TopicCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCluster, setSelectedCluster] = useState<TopicCluster | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState(0.65);
+  const [timeRange, setTimeRange] = useState<'30d' | '90d' | '180d' | '365d' | 'all'>('30d');
+  const [progress, setProgress] = useState<{
+    emailCount: number;
+    clusterCount: number;
+    clusteredEmails: number;
+    oldestClusteredDate: string | null;
+  } | null>(null);
+
+  // Use timeline data hook
+  const { emails, cluster, loading: timelineLoading, error: timelineError } = useTimelineData(selectedClusterId);
 
   // Fetch clusters on mount
   useEffect(() => {
     fetchClusters();
+    fetchProgress();
   }, []);
+
+  const fetchProgress = async () => {
+    try {
+      const response = await fetch('/api/graph/topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'progress' }),
+      });
+      const data = await response.json();
+      setProgress(data);
+    } catch (err) {
+      console.error('[TopicClusterView] Error fetching progress:', err);
+    }
+  };
 
   const fetchClusters = async () => {
     setLoading(true);
@@ -63,9 +75,26 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
     }
   };
 
+  const handleClusterSelect = (selectedCluster: TopicCluster) => {
+    setSelectedClusterId(selectedCluster.id);
+    onClusterClick?.(selectedCluster);
+  };
+
   const triggerClustering = async () => {
     setLoading(true);
     setError(null);
+
+    // Calculate date range based on selection
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+
+    if (timeRange !== 'all') {
+      const days = parseInt(timeRange);
+      const start = new Date();
+      start.setDate(start.getDate() - days);
+      startDate = start.toISOString();
+      endDate = new Date().toISOString();
+    }
 
     try {
       const response = await fetch('/api/graph/topics', {
@@ -75,8 +104,10 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
         },
         body: JSON.stringify({
           action: 'cluster',
-          threshold: 0.75,
-          limit: 50, // Cluster up to 50 unclustered emails
+          threshold: threshold,
+          limit: 100,
+          startDate,
+          endDate,
         }),
       });
 
@@ -85,23 +116,15 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
       }
 
       const data = await response.json();
-      setClusters(prev => [...prev, ...(data.clusters || [])]);
+      setClusters(data.clusters || []);
+      // Refresh progress after clustering
+      await fetchProgress();
     } catch (err) {
       console.error('[TopicClusterView] Error clustering:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  };
-
-  const getConfidenceColor = (confidence: number): string => {
-    if (confidence >= 0.8) return 'bg-green-500';
-    if (confidence >= 0.6) return 'bg-yellow-500';
-    return 'bg-orange-500';
-  };
-
-  const getConfidenceWidth = (confidence: number): string => {
-    return `${Math.round(confidence * 100)}%`;
   };
 
   if (loading && clusters.length === 0) {
@@ -113,147 +136,144 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
   }
 
   return (
-    <div className="topic-cluster-view p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            Topic Clusters
-          </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {clusters.length} cluster{clusters.length !== 1 ? 's' : ''} found
-          </p>
+    <div className="flex h-[650px]">
+      {/* Cluster Sidebar */}
+      <div className="w-80 border-r border-gray-200 bg-gray-50 p-4 overflow-y-auto flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Clusters</h2>
+          <span className="text-sm text-gray-500">{clusters.length}</span>
         </div>
-        <button
-          onClick={triggerClustering}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Clustering...' : 'Cluster New Emails'}
-        </button>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
+        {clusters.length === 0 && !loading && (
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">No clusters yet</p>
+            <button
+              onClick={triggerClustering}
+              disabled={loading}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300"
+            >
+              Cluster Emails
+            </button>
+          </div>
+        )}
 
-      {/* No clusters */}
-      {clusters.length === 0 && !loading && (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-600 mb-4">
-            No topic clusters found yet.
-          </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Clusters will be created automatically as you search and read emails,
-            or you can manually trigger clustering now.
-          </p>
-          <button
-            onClick={triggerClustering}
-            disabled={loading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300"
-          >
-            Create First Clusters
-          </button>
-        </div>
-      )}
-
-      {/* Clusters list */}
-      <div className="space-y-4">
-        {clusters.map((cluster) => (
-          <div
-            key={cluster.id}
-            onClick={() => {
-              setSelectedCluster(cluster);
-              onClusterClick?.(cluster);
-            }}
-            className="p-4 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-          >
-            {/* Cluster header */}
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h3 className="text-lg font-medium text-gray-900 mb-1">
-                  {cluster.name}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {cluster.description}
-                </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                {cluster.userConfirmed && (
-                  <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                    ✓ Confirmed
-                  </span>
-                )}
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                  {cluster.emailIds.length} email{cluster.emailIds.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-
-            {/* Confidence bar */}
+        {clusters.length > 0 && (
+          <>
+            {/* Threshold selector */}
             <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-600">Confidence</span>
-                <span className="text-xs text-gray-600">
-                  {Math.round(cluster.confidence * 100)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${getConfidenceColor(cluster.confidence)}`}
-                  style={{ width: getConfidenceWidth(cluster.confidence) }}
-                />
-              </div>
+              <label className="text-xs text-gray-500 block mb-1">Similarity Threshold</label>
+              <select
+                value={threshold}
+                onChange={(e) => setThreshold(Number(e.target.value))}
+                className="w-full text-sm border rounded px-2 py-1.5 bg-white"
+              >
+                <option value={0.5}>Low (0.5) - More groups</option>
+                <option value={0.65}>Medium (0.65) - Balanced</option>
+                <option value={0.75}>High (0.75) - Strict</option>
+              </select>
             </div>
 
-            {/* Subject variations */}
-            {cluster.subjectVariations.length > 1 && (
-              <div className="mb-2">
-                <p className="text-xs text-gray-600 mb-1">Subject variations:</p>
-                <div className="flex flex-wrap gap-2">
-                  {cluster.subjectVariations.slice(0, 3).map((subject, i) => (
-                    <span
-                      key={i}
-                      className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
-                    >
-                      {subject.length > 40 ? subject.substring(0, 40) + '...' : subject}
-                    </span>
-                  ))}
-                  {cluster.subjectVariations.length > 3 && (
-                    <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded">
-                      +{cluster.subjectVariations.length - 3} more
-                    </span>
-                  )}
+            {/* Time Range Selector */}
+            <div className="mb-3">
+              <label className="text-xs text-gray-500 block mb-1">Time Range</label>
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value as any)}
+                className="w-full text-sm border rounded px-2 py-1.5 bg-white"
+              >
+                <option value="30d">Last 30 Days</option>
+                <option value="90d">Last 90 Days</option>
+                <option value="180d">Last 6 Months</option>
+                <option value="365d">Last Year</option>
+                <option value="all">All Time</option>
+              </select>
+            </div>
+
+            {/* Progress Indicator */}
+            {progress && (
+              <div className="mb-3 p-2 bg-gray-100 rounded text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Clusters:</span>
+                  <span className="font-medium">{progress.clusterCount}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Emails clustered:</span>
+                  <span className="font-medium">{progress.clusteredEmails}/{progress.emailCount}</span>
+                </div>
+                {progress.oldestClusteredDate && (
+                  <div className="flex justify-between mt-1">
+                    <span className="text-gray-600">Oldest clustered:</span>
+                    <span className="font-medium">{new Date(progress.oldestClusteredDate).toLocaleDateString()}</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Date range */}
-            <div className="flex items-center text-xs text-gray-600">
-              <span>
-                {new Date(cluster.firstEmailDate).toLocaleDateString()} — {new Date(cluster.lastEmailDate).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        ))}
+            <button
+              onClick={triggerClustering}
+              disabled={loading}
+              className="w-full mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 text-sm"
+            >
+              {loading ? 'Clustering...' : 'Cluster New Emails'}
+            </button>
+
+            <ClusterSidebar
+              clusters={clusters}
+              selectedClusterId={selectedClusterId}
+              onClusterSelect={handleClusterSelect}
+            />
+          </>
+        )}
       </div>
 
-      {/* Selected cluster detail */}
-      {selectedCluster && (
-        <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">
-            Selected Cluster Details
-          </h3>
-          <div className="space-y-2 text-sm">
-            <p><strong>ID:</strong> {selectedCluster.id}</p>
-            <p><strong>Created:</strong> {new Date(selectedCluster.createdAt).toLocaleString()}</p>
-            <p><strong>Email IDs:</strong> {selectedCluster.emailIds.join(', ')}</p>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {!selectedClusterId && (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <div className="text-5xl mb-4">📋</div>
+              <h3 className="text-xl font-medium text-gray-900 mb-2">
+                Select a Cluster
+              </h3>
+              <p className="text-sm text-gray-500 max-w-sm mx-auto">
+                Choose a cluster from the sidebar to view its timeline
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {selectedClusterId && timelineLoading && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-gray-600">Loading timeline...</span>
+            </div>
+          </div>
+        )}
+
+        {selectedClusterId && timelineError && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Error</h3>
+              <p className="text-sm text-red-600">{timelineError}</p>
+              <button
+                onClick={() => setSelectedClusterId(null)}
+                className="mt-4 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedClusterId && cluster && !timelineLoading && !timelineError && (
+          <TimelineView
+            cluster={cluster}
+            emails={emails}
+          />
+        )}
+      </div>
     </div>
   );
 }
