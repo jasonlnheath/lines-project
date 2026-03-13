@@ -77,6 +77,19 @@
 - [ ] Conversation summarization
 - [ ] Reference earlier messages in new replies
 
+### Contact Relationship Context (Phase 2 - DONE)
+- [x] Microsoft Graph People API integration
+- [x] Microsoft Graph Manager/Direct Reports API
+- [x] Role detection from job title/department (12 roles)
+- [x] Agent-driven onboarding (NO manual tags)
+- [x] CYA (Cover Your Ass) rules - manager, executives always push
+- [x] Role-specific question templates
+- [x] Push/pull preference system
+- [x] Progressive disclosure for new senders
+- [x] Relationship badges in UI (manager, executive, team, VIP, customer)
+- [ ] iOS Contacts integration (Phase 3)
+- [ ] Contact sync from Outlook (Phase 3)
+
 ## V1.1 Features (Post-MVP)
 
 ### Hands-Free Mode
@@ -122,6 +135,23 @@
 - [ ] Contact lookup
 - [ ] Teams meeting creation
 
+### Context Aggregation Framework
+- [ ] Multi-channel context ingestion
+  - [ ] Email (Microsoft Graph) - DONE
+  - [ ] Teams messages
+  - [ ] Teams meeting transcripts
+  - [ ] SMS/iMessage (iOS limited)
+  - [ ] Phone call notes (manual entry)
+- [ ] Model-agnostic tool architecture
+  - [ ] Context fetchers independent of LLM choice
+  - [ ] Standardized context schema
+  - [ ] Tool registry for pluggable context sources
+- [ ] Meeting Intelligence
+  - [ ] Teams auto-transcription integration
+  - [ ] Meeting minutes auto-generation
+  - [ ] Action item extraction
+  - [ ] Follow-up email drafting from meeting notes
+
 ## V1.2+ Features (Future)
 
 ### Extended Context
@@ -129,6 +159,19 @@
 - [ ] Month-long context retention
 - [ ] Relationship mapping
 - [ ] Project timeline tracking
+
+### Puzzle-Piece Thread Clustering
+- [ ] Confidence interval visualization
+  - [ ] Show similarity score on thread suggestions
+  - [ ] Visual fit indicator (good fit / partial fit / poor fit)
+- [ ] Interactive cluster assembly
+  - [ ] "Try this piece" mode - preview how thread fits
+  - [ ] A/B comparison of cluster configurations
+  - [ ] User decision tracking for learning
+- [ ] Outlook round-trip
+  - [ ] Push confirmed thread connections to Outlook
+  - [ ] Create conversation categories in Outlook
+  - [ ] Sync thread groups across devices
 
 ### AI Compose
 - [ ] Draft generation

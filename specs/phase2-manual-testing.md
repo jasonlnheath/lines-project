@@ -407,6 +407,190 @@ This guide provides step-by-step manual testing procedures for each Phase 2 card
 
 ---
 
+## CARD-23: Role Detector Service
+
+### Test 1: Sales Role Detection
+1. Sign in with account having job title "Sales Manager"
+2. View detected role in Settings
+3. **Expected**: Role shows "Sales Professional" with high confidence
+
+### Test 2: Executive Role Detection
+1. Sign in with account having job title "VP of Sales"
+2. View detected role
+3. **Expected**: Role shows "Executive" with high confidence
+
+### Test 3: Engineering Role Detection
+1. Sign in with account having job title "Software Engineer"
+2. View detected role
+3. **Expected**: Role shows "Engineer" with high confidence
+
+### Test 4: Unknown Role Detection
+1. Sign in with account having job title "Mystery Role"
+2. View detected role
+3. **Expected**: Role shows "Professional" with low confidence
+
+### Test 5: Department-Based Detection
+1. Sign in with account in "Procurement" department
+2. View detected role
+3. **Expected**: Role shows "Purchasing Agent" with medium confidence
+
+---
+
+## CARD-24: Onboarding Agent Service
+
+### Test 1: Start Onboarding
+1. Clear user preferences
+2. Trigger onboarding
+3. **Expected**: Welcome message shows detected role
+
+### Test 2: Role-Specific Questions (Sales)
+1. Start onboarding as Sales role
+2. View questions
+3. **Expected**: Questions about customers, prospects, partners, vendors
+
+### Test 3: Role-Specific Questions (Executive)
+1. Start onboarding as Executive role
+2. View questions
+3. **Expected**: Questions about team, board, executives, media
+
+### Test 4: Answer Submission
+1. Start onboarding
+2. Answer "Yes, push" to first question
+3. **Expected**: Answer recorded, advances to next question
+
+### Test 5: Onboarding Completion
+1. Answer all onboarding questions
+2. **Expected**: Summary screen with all rules displayed
+
+### Test 6: Skip Onboarding
+1. Start onboarding
+2. Click "Skip"
+3. **Expected**: Default rules applied, can re-run in Settings
+
+### Test 7: Pre-filled Contacts
+1. Have manager in Graph API
+2. Start onboarding
+3. **Expected**: Manager shown as pre-filled "always push" contact
+
+---
+
+## CARD-25: Relationship Context Provider
+
+### Test 1: Manager Detection (CYA Rule)
+1. Configure manager email in settings
+2. Receive email from manager
+3. **Expected**: Push decision returns "push" with reason "your_manager"
+
+### Test 2: Executive Detection
+1. Receive email from user with "VP" or "Chief" title
+2. **Expected**: Push decision returns "push" with reason "executive"
+
+### Test 3: Direct Report Detection
+1. Have direct reports in Graph API
+2. Receive email from direct report
+3. **Expected**: Push decision includes team relationship
+
+### Test 4: New Sender Prompt
+1. Receive email from unknown sender
+2. **Expected**: NewSenderPrompt created with suggested action
+
+### Test 5: Internal vs External
+1. Receive email from colleague@company.com
+2. Receive email from vendor@external.com
+3. **Expected**: Internal marked as "internal", external marked as "external"
+
+### Test 6: Contact Context Retrieval
+1. Receive email from known contact
+2. View contact context
+3. **Expected**: Shows relationship, company, push preference
+
+---
+
+## CARD-26: Sender Avatar Badges
+
+### Test 1: Manager Badge
+1. View email from your manager
+2. **Expected**: Red badge with "Your Manager" label
+
+### Test 2: Executive Badge
+1. View email from executive (VP, C-level)
+2. **Expected**: Purple badge with "Executive" label
+
+### Test 3: Team Member Badge
+1. View email from direct report
+2. **Expected**: Blue badge with "Team Member" label
+
+### Test 4: VIP Badge
+1. Mark contact as VIP
+2. View email from this contact
+3. **Expected**: Yellow badge with "VIP" label
+
+### Test 5: Customer Badge
+1. Mark contact as customer
+2. View email from this contact
+3. **Expected**: Green badge with "Customer" label
+
+### Test 6: No Badge for Unknown
+1. View email from unknown external sender
+2. **Expected**: No relationship badge displayed
+
+### Test 7: Badge Tooltip
+1. Hover over relationship badge
+2. **Expected**: Shows relationship details
+
+---
+
+## CARD-27: Graph People API Integration
+
+### Test 1: Fetch Relevant People
+1. Trigger contact sync
+2. **Expected**: People API returns relevance-ranked contacts
+
+### Test 2: Relevance Score
+1. View contacts list
+2. **Expected**: Contacts sorted by relevance score (most relevant first)
+
+### Test 3: Person Type Classification
+1. View contact details
+2. **Expected**: Shows personType (Person, Contact, etc.)
+
+### Test 4: Job Title Extraction
+1. Sync contacts
+2. View contact with job title
+3. **Expected**: Job title displayed in contact card
+
+### Test 5: Department Extraction
+1. Sync contacts
+2. View contact with department
+3. **Expected**: Department displayed in contact card
+
+---
+
+## CARD-28: Manager/Direct Reports API
+
+### Test 1: Manager Fetch
+1. Query Graph API for manager
+2. **Expected**: Returns manager user object with job title
+
+### Test 2: Direct Reports Fetch
+1. Query Graph API for direct reports
+2. **Expected**: Returns array of direct report user objects
+
+### Test 3: Manager Email Match
+1. Configure managerEmail in settings
+2. Receive email from that address
+3. **Expected**: Recognized as manager even without contact sync
+
+### Test 4: Org Hierarchy Display
+1. View organization section in contact details
+2. **Expected**: Shows manager and direct reports
+
+### Test 5: Executive Detection from Manager Chain
+1. Manager reports to C-level
+2. **Expected**: System aware of executive in reporting chain
+
+---
+
 ## Test Results Template
 
 | Card | Tests | Pass | Fail | Notes |
@@ -421,7 +605,13 @@ This guide provides step-by-step manual testing procedures for each Phase 2 card
 | 20 | 8 | | | |
 | 21 | 9 | | | |
 | 22 | 10 | | | |
-| **Total** | **75** | | | |
+| 23 | 5 | | | Role Detection |
+| 24 | 7 | | | Onboarding Agent |
+| 25 | 6 | | | Relationship Context |
+| 26 | 7 | | | Sender Badges |
+| 27 | 5 | | | People API |
+| 28 | 5 | | | Manager/Direct Reports |
+| **Total** | **110** | | | |
 
 ---
 

@@ -41,11 +41,16 @@ export const msalConfig: Configuration = {
 export const graphScopes = {
   // User profile
   userRead: ['User.Read'],
+  userReadAll: ['User.Read.All'], // For manager/direct reports
 
   // Mail access
   mailRead: ['Mail.Read'],
   mailReadWrite: ['Mail.ReadWrite'],
   mailSend: ['Mail.Send'],
+
+  // Contacts access (for relationship context)
+  contactsRead: ['Contacts.Read'],
+  peopleRead: ['People.Read'],
 
   // OneDrive access
   filesReadWrite: ['Files.ReadWrite'],
@@ -60,9 +65,12 @@ export const graphScopes = {
  */
 export const authScopes = [
   'User.Read',
+  'User.Read.All',
   'Mail.Read',
   'Mail.ReadWrite',
   'Mail.Send',
+  'Contacts.Read',
+  'People.Read',
   'Files.ReadWrite',
   'Files.ReadWrite.All',
   'offline_access',

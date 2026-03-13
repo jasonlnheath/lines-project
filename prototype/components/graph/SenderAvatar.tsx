@@ -1,6 +1,7 @@
 /**
  * SenderAvatar Component
  * Displays user initials or avatar with consistent color coding
+ * Enhanced with relationship badges for important contacts
  */
 
 'use client';
@@ -14,6 +15,8 @@ interface SenderAvatarProps {
   showStatus?: boolean;
   statusColor?: string;
   className?: string;
+  // Relationship badges
+  relationship?: 'manager' | 'executive' | 'direct_report' | 'vip' | 'customer' | null;
 }
 
 // Generate consistent color from email hash
@@ -59,6 +62,15 @@ const sizeClasses = {
   lg: 'w-10 h-10 text-base',
 };
 
+// Badge styles for different relationship types
+const relationshipBadgeStyles: Record<string, { bg: string; icon: string; label: string }> = {
+  manager: { bg: 'bg-red-500', icon: '👔', label: 'Your Manager' },
+  executive: { bg: 'bg-purple-500', icon: '⭐', label: 'Executive' },
+  direct_report: { bg: 'bg-blue-500', icon: '👥', label: 'Team Member' },
+  vip: { bg: 'bg-yellow-500', icon: '⭐', label: 'VIP' },
+  customer: { bg: 'bg-green-500', icon: '💼', label: 'Customer' },
+};
+
 export function SenderAvatar({
   email,
   name,
@@ -66,9 +78,12 @@ export function SenderAvatar({
   showStatus = false,
   statusColor,
   className = '',
+  relationship,
 }: SenderAvatarProps) {
   const initials = useMemo(() => getInitials(name, email), [name, email]);
   const colorClass = useMemo(() => getEmailColor(email), [email]);
+
+  const badge = relationship && relationshipBadgeStyles[relationship];
 
   return (
     <div className={`relative inline-flex ${className}`}>
@@ -86,6 +101,23 @@ export function SenderAvatar({
       >
         {initials}
       </div>
+      {/* Relationship badge */}
+      {badge && (
+        <div
+          className={`
+            absolute -top-1 -right-1
+            w-4 h-4 rounded-full
+            ${badge.bg}
+            flex items-center justify-center
+            text-[10px] border-2 border-white
+            shadow-sm
+          `}
+          title={badge.label}
+        >
+          {badge.icon}
+        </div>
+      )}
+      {/* Status indicator */}
       {showStatus && statusColor && (
         <div
           className={`
