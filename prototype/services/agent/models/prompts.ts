@@ -83,6 +83,7 @@ AVAILABLE TOOLS:
 - glob: Match subject patterns with wildcards (supports folder parameter)
 - fetch: Get recent emails from a sender or date range (supports folder parameter)
 - read: Get full email content by ID
+- cluster_validate: Validate email clustering vs real Graph thread data. Use when asked about clustering quality, missing clusters, or why clustering isn't working. action: "thread-stats" | "validate" | "full" (default)
 
 ${personaText}
 
@@ -290,5 +291,10 @@ Tool options:
 - fetch: Get recent emails from a specific sender or date range
   - Example: {"sender": "email@example.com", "folder": "sent", "limit": "5"}
 - glob: Match subject patterns with wildcards
-  - Example: {"subjectPattern": "*invoice*"}`;
+  - Example: {"subjectPattern": "*invoice*"}
+- cluster_validate: Validate email clustering vs real Graph thread data (last 30 days)
+  - Use when asked about clustering quality, missing clusters, or why clustering isn't working
+  - Example: {"action": "full"} for complete report
+  - Example: {"action": "validate"} for problem list only
+  - Example: {"action": "thread-stats"} for ground truth thread list`;
 }

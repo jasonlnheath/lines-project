@@ -2,6 +2,10 @@
  * Push/Pull Service
  *
  * Business logic for managing push/pull email preferences.
+ * Supports three preference types:
+ * - sender: specific email addresses
+ * - thread: specific conversation threads (by conversationId)
+ * - line: topic lines/clusters (by lineId)
  */
 
 import {
@@ -9,9 +13,7 @@ import {
   VIPSender,
   TimeSensitiveKeyword,
   PreferenceQuery,
-  BulkImportResult,
-  LegacyPreference,
-  MigrationResult,
+  PreferenceType,
 } from './types';
 import { PushPullStorage } from './pushPullStorage';
 
@@ -20,17 +22,6 @@ import { PushPullStorage } from './pushPullStorage';
  */
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-}
-
-/**
- * Convert wildcard pattern to regex for matching
- */
-function wildcardToRegex(pattern: string): RegExp {
-  // Escape special regex characters except * and ?
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  // Replace * with .* and ? with .
-  const regexPattern = escaped.replace(/\*/g, '.*').replace(/\?/g, '.');
-  return new RegExp(`^${regexPattern}$`, 'i');
 }
 
 /**
@@ -44,13 +35,14 @@ export class PushPullService {
   }
 
   /**
-   * Set a push/pull preference for a sender or subject
+   * Set a push/pull preference for a sender, thread, or line
    */
   async setPreference(
     userId: string,
-    type: 'sender' | 'subject',
+    type: PreferenceType,
     value: string,
-    mode: 'push' | 'pull'
+    mode: 'push' | 'pull',
+    extra?: { isBoss?: boolean; isVIP?: boolean; name?: string }
   ): Promise<PushPullPreference> {
     const preferences = await this.storage.getPreferences(userId);
 
@@ -65,6 +57,9 @@ export class PushPullService {
       // Update existing preference
       preferences[existingIndex].mode = mode;
       preferences[existingIndex].updatedAt = now;
+      if (extra?.isBoss !== undefined) preferences[existingIndex].isBoss = extra.isBoss;
+      if (extra?.isVIP !== undefined) preferences[existingIndex].isVIP = extra.isVIP;
+      if (extra?.name !== undefined) preferences[existingIndex].name = extra.name;
       await this.storage.savePreferences(userId, preferences);
       return preferences[existingIndex];
     }
@@ -76,6 +71,9 @@ export class PushPullService {
       type,
       value,
       mode,
+      isBoss: extra?.isBoss || false,
+      isVIP: extra?.isVIP || false,
+      name: extra?.name,
       createdAt: now,
       updatedAt: now,
     };
@@ -86,45 +84,54 @@ export class PushPullService {
   }
 
   /**
-   * Get preference for a specific sender or subject
+   * Get preference for a specific sender, thread, or line
    * Returns null if no preference exists (default behavior is 'pull')
    */
   async getPreference(
     userId: string,
-    type: 'sender' | 'subject',
+    type: PreferenceType,
     value: string
   ): Promise<'push' | 'pull' | null> {
     const preferences = await this.storage.getPreferences(userId);
 
-    // Exact match first
-    const exactMatch = preferences.find(
+    // Exact match only - no wildcard matching for security
+    const match = preferences.find(
       (p) => p.userId === userId && p.type === type && p.value.toLowerCase() === value.toLowerCase()
     );
 
-    if (exactMatch) {
-      return exactMatch.mode;
+    return match?.mode ?? null; // No preference found (default is 'pull')
+  }
+
+  /**
+   * Get preference for an email considering all types
+   * Checks sender, thread (conversationId), and line preferences
+   */
+  async getPreferenceForEmail(
+    userId: string,
+    email: { sender: string; conversationId: string; lineId?: string }
+  ): Promise<{ mode: 'push' | 'pull'; matchedType: PreferenceType | 'default' }> {
+    // 1. Check sender preference
+    const senderPref = await this.getPreference(userId, 'sender', email.sender);
+    if (senderPref) {
+      return { mode: senderPref, matchedType: 'sender' };
     }
 
-    // For subjects, check wildcard patterns
-    if (type === 'subject') {
-      const wildcardMatch = preferences.find((p) => {
-        if (p.userId !== userId || p.type !== 'subject') {
-          return false;
-        }
-        // Check if the preference value contains wildcards
-        if (p.value.includes('*') || p.value.includes('?')) {
-          const regex = wildcardToRegex(p.value);
-          return regex.test(value);
-        }
-        return false;
-      });
+    // 2. Check thread preference
+    const threadPref = await this.getPreference(userId, 'thread', email.conversationId);
+    if (threadPref) {
+      return { mode: threadPref, matchedType: 'thread' };
+    }
 
-      if (wildcardMatch) {
-        return wildcardMatch.mode;
+    // 3. Check line preference (if email belongs to a line)
+    if (email.lineId) {
+      const linePref = await this.getPreference(userId, 'line', email.lineId);
+      if (linePref) {
+        return { mode: linePref, matchedType: 'line' };
       }
     }
 
-    return null; // No preference found (default is 'pull')
+    // Default to pull
+    return { mode: 'pull', matchedType: 'default' };
   }
 
   /**
@@ -143,6 +150,40 @@ export class PushPullService {
       }
       return true;
     });
+  }
+
+  /**
+   * Get a single preference by ID
+   */
+  async getPreferenceById(userId: string, preferenceId: string): Promise<PushPullPreference | null> {
+    const preferences = await this.storage.getPreferences(userId);
+    return preferences.find((p) => p.id === preferenceId && p.userId === userId) || null;
+  }
+
+  /**
+   * Update a preference by ID
+   */
+  async updatePreferenceById(
+    userId: string,
+    preferenceId: string,
+    updates: Partial<Pick<PushPullPreference, 'mode' | 'isVIP' | 'isBoss' | 'name'>>
+  ): Promise<PushPullPreference | null> {
+    const preferences = await this.storage.getPreferences(userId);
+    const index = preferences.findIndex((p) => p.id === preferenceId && p.userId === userId);
+
+    if (index < 0) {
+      return null; // Not found
+    }
+
+    // Apply updates
+    preferences[index] = {
+      ...preferences[index],
+      ...updates,
+      updatedAt: Date.now(),
+    };
+
+    await this.storage.savePreferences(userId, preferences);
+    return preferences[index];
   }
 
   /**
@@ -167,8 +208,8 @@ export class PushPullService {
    */
   async bulkImport(
     userId: string,
-    items: Array<{ type: 'sender' | 'subject'; value: string; mode: 'push' | 'pull' }>
-  ): Promise<BulkImportResult> {
+    items: Array<{ type: PreferenceType; value: string; mode: 'push' | 'pull' }>
+  ): Promise<{ imported: number; updated: number; failed: number; durationMs: number }> {
     const startTime = Date.now();
     let imported = 0;
     let updated = 0;
@@ -217,35 +258,7 @@ export class PushPullService {
   }
 
   /**
-   * Migrate legacy preferences from Phase 1
-   */
-  async migrateLegacy(userId: string, legacy: LegacyPreference[]): Promise<MigrationResult> {
-    const migrated: string[] = [];
-    const errors: string[] = [];
-
-    for (const item of legacy) {
-      try {
-        if (item.sender) {
-          await this.setPreference(userId, 'sender', item.sender, item.mode);
-          migrated.push(item.sender);
-        } else if (item.subject) {
-          await this.setPreference(userId, 'subject', item.subject, item.mode);
-          migrated.push(item.subject);
-        }
-      } catch (error) {
-        errors.push(`${item.sender || item.subject}: ${error}`);
-      }
-    }
-
-    return {
-      migrated: migrated.length,
-      skipped: legacy.length - migrated.length,
-      errors,
-    };
-  }
-
-  /**
-   * Get default mode for new senders/subjects
+   * Get default mode for new senders/threads/lines
    */
   getDefaultMode(): 'pull' {
     return 'pull';
@@ -304,6 +317,30 @@ export class PushPullService {
     });
   }
 
+  /**
+   * Get all VIP senders for a user
+   */
+  async getVIPSenders(userId: string): Promise<VIPSender[]> {
+    const vipSenders = await this.storage.getVIPSenders(userId);
+    return vipSenders.filter((v) => v.userId === userId);
+  }
+
+  /**
+   * Remove a VIP sender
+   */
+  async removeVIPSender(userId: string, vipId: string): Promise<boolean> {
+    const vipSenders = await this.storage.getVIPSenders(userId);
+    const index = vipSenders.findIndex((v) => v.id === vipId && v.userId === userId);
+
+    if (index < 0) {
+      return false;
+    }
+
+    vipSenders.splice(index, 1);
+    await this.storage.saveVIPSenders(userId, vipSenders);
+    return true;
+  }
+
   // Time-Sensitive Keywords
 
   /**
@@ -355,6 +392,30 @@ export class PushPullService {
 
       return text.includes(k.keyword);
     });
+  }
+
+  /**
+   * Get all keywords for a user
+   */
+  async getKeywords(userId: string): Promise<TimeSensitiveKeyword[]> {
+    const keywords = await this.storage.getKeywords(userId);
+    return keywords.filter((k) => k.userId === userId);
+  }
+
+  /**
+   * Delete a keyword
+   */
+  async deleteKeyword(userId: string, keywordId: string): Promise<boolean> {
+    const keywords = await this.storage.getKeywords(userId);
+    const index = keywords.findIndex((k) => k.id === keywordId && k.userId === userId);
+
+    if (index < 0) {
+      return false;
+    }
+
+    keywords.splice(index, 1);
+    await this.storage.saveKeywords(userId, keywords);
+    return true;
   }
 }
 

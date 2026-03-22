@@ -13,7 +13,7 @@ interface OnboardingWrapperProps {
 }
 
 export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
-  const { needsOnboarding, loading } = useAuth();
+  const { needsOnboarding, loading, authenticated } = useAuth();
 
   // Show loading state
   if (loading) {
@@ -26,8 +26,8 @@ export function OnboardingWrapper({ children }: OnboardingWrapperProps) {
 
   return (
     <>
-      {/* Show onboarding modal if needed */}
-      {needsOnboarding && <OnboardingModal />}
+      {/* Show onboarding modal only if authenticated AND needs onboarding */}
+      {authenticated && needsOnboarding && <OnboardingModal />}
 
       {/* Main content */}
       {children}

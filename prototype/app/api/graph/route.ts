@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       version: graph.version,
       lastUpdated: graph.lastUpdated,
       emailCount: graph.emails.size,
-      topicClusterCount: graph.topicClusters.size,
+      topicLineCount: graph.topicLines.size,
       connectionCount: graph.connections.size,
 
       // Include counts for indexes

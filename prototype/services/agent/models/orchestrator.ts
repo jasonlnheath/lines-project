@@ -14,9 +14,10 @@ export interface ResearchPlan {
 }
 
 export interface SearchSuggestion {
-  tool: 'search' | 'fetch' | 'glob';
+  tool: 'search' | 'fetch' | 'glob' | 'cluster_search' | 'topic_explore' | 'orphan_search';
   args: Record<string, any>;
   rationale: string;
+  priority?: 'primary' | 'fallback';
 }
 
 export interface OODAInsight {
@@ -91,9 +92,24 @@ IMPORTANT:
       // If searches are missing folder, automatically create inbox+sent versions
       const processedSearches = this.ensureFolderCoverage(plan.searches);
 
+      // NEW: Always prepend cluster_search as the primary search
+      const clusterFirstSearch: SearchSuggestion = {
+        tool: 'cluster_search',
+        args: {
+          query: query,
+          maxClusters: 5,
+          includeOrphanSearch: true,
+          includeThreadMerge: true,
+          queueSuggestions: true,
+          minScore: 0.3
+        },
+        rationale: 'Primary search: find relevant clusters using semantic profiles and queue suggestions',
+        priority: 'primary'
+      };
+
       return {
-        searches: processedSearches,
-        reasoning: plan.reasoning,
+        searches: [clusterFirstSearch, ...processedSearches],
+        reasoning: `Cluster-first search with learning loop: ${plan.reasoning}`,
       };
     } catch (error) {
       console.error('[Orchestrator] Error planning research:', error);

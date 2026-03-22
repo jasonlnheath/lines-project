@@ -179,7 +179,7 @@ export class MultiModelOrchestrator {
    * Execute search operations using Search Agent
    */
   private async executeSearches(
-    searches: Array<{ tool: string; args: Record<string, any>; rationale: string }>,
+    searches: Array<{ tool: string; args: Record<string, any>; rationale: string; priority?: 'primary' | 'fallback' }>,
     context: { accessToken: string; userId: string },
     toolTrace: ToolTraceEntry[],
     toolResults: Record<string, any>
@@ -218,6 +218,33 @@ export class MultiModelOrchestrator {
           // Use unique key: 'grep', 'grep_2', 'grep_3', etc.
           const resultKey = count === 0 ? search.tool : `${search.tool}_${count + 1}`;
           toolResults[resultKey] = result.data;
+
+          // NEW: Fallback logic for cluster_search
+          if (search.tool === 'cluster_search' && (search as any).priority === 'primary') {
+            const clustersFound = result.data?.clusters?.length || 0;
+            const suggestionsQueued = result.data?.suggestionsQueued || 0;
+
+            console.log(`[MultiModelOrchestrator] cluster_search found ${clustersFound} clusters, queued ${suggestionsQueued} suggestions`);
+
+            // If no clusters found, fallback to thread search
+            if (clustersFound === 0) {
+              console.log('[MultiModelOrchestrator] No clusters found, falling back to thread search');
+
+              // Create fallback thread search
+              const threadSearch = {
+                tool: 'search' as const,
+                args: {
+                  query: search.args.query || '',
+                  limit: 20
+                },
+                rationale: 'Fallback: search for conversation threads since no clusters exist yet',
+                priority: 'fallback' as const
+              };
+
+              // Recursively execute the fallback search
+              await this.executeSearches([threadSearch], context, toolTrace, toolResults);
+            }
+          }
 
           console.log(`[MultiModelOrchestrator] Stored result as: ${resultKey}, found: ${result.data?.count || result.data?.totalResults || result.data?.total || 0} results`);
         }
@@ -481,6 +508,11 @@ export class MultiModelOrchestrator {
               topics: [],
               keywords: [],
               entities: [], // Will be populated by embedding service
+
+              // Folder and direction tracking (default to inbox for readTool)
+              folder: 'inbox' as const,
+              isSent: false,
+              direction: 'incoming' as const,
 
               indexedAt: Date.now(),
               lastAccessed: Date.now(),

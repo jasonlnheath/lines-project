@@ -12,21 +12,42 @@
 
 ### Push/Pull Inbox System
 - [ ] Default pull behavior (messages wait silently)
-- [ ] Auto-push triggers:
+- [ ] Sender Priority Hierarchy (in order):
+  1. [ ] **Boss** - Highest priority, always push, special treatment
+  2. [ ] **VIP** - Always push, special treatment
+  3. [ ] **Known sender with push preference** - Push as configured
+  4. [ ] **Known sender with pull preference** - Pull as configured
+  5. [ ] **Unknown sender** - Pull (analyze to determine priority)
+- [ ] Auto-push triggers (ONLY for known senders):
   - [ ] Importance flag (!) + direct recipient (not CC)
   - [ ] Angry boss detection (red tone from manager)
   - [ ] Time-sensitive keywords + direct recipient
-  - [ ] User-designated VIP senders
+- [ ] **Unknown Sender Analysis**:
+  - [ ] Agent analyzes message to extract sender name and company
+  - [ ] Cross-reference against sender list to determine if known
+  - [ ] Urgent subjects from unknown senders are NOT prioritized
+  - [ ] Trigger rules do NOT apply to unknown senders
+  - [ ] Present analysis to user for sender list addition decision
 - [ ] Progressive disclosure onboarding
   - [ ] New sender → ask push/pull preference
   - [ ] New subject → ask push/pull preference
   - [ ] Show settings location
-- [ ] User-defined push rules (sender, subject, combination)
+- [ ] User-defined push rules (sender, thread, line)
+  - [ ] **Senders tab**: Email/phone, name, Boss/VIP toggle, push/pull
+  - [ ] **Conversations tab**: Lines (push/pull groups), Unassigned threads
 
 ### Priority System
+- [ ] Priority hierarchy (from highest to lowest):
+  1. Boss sender
+  2. VIP sender
+  3. Known sender with push preference
+  4. Line push preference (applies to all threads in line)
+  5. Thread push preference (only if NOT in a line)
+  6. Domain wildcard preference
+  7. Default (pull)
 - [ ] Three-tier priority (High/Medium/Low)
 - [ ] Sender-based priority rules
-- [ ] Subject keyword priority rules
+- [ ] Subject keyword priority rules (only for known senders)
 - [ ] Manual priority override
 - [ ] Priority persistence across sessions
 
@@ -83,10 +104,17 @@
 - [x] Role detection from job title/department (12 roles)
 - [x] Agent-driven onboarding (NO manual tags)
 - [x] CYA (Cover Your Ass) rules - manager, executives always push
+- [x] **Boss designation** - User can mark any sender as Boss (highest priority)
+  - Multiple bosses allowed
+  - Boss takes priority over VIP
+  - Boss = always push + special treatment
+- [x] **VIP designation** - User can mark any sender as VIP
+  - VIP = always push + special treatment
+  - Lower priority than Boss
 - [x] Role-specific question templates
 - [x] Push/pull preference system
 - [x] Progressive disclosure for new senders
-- [x] Relationship badges in UI (manager, executive, team, VIP, customer)
+- [x] Relationship badges in UI (manager, executive, team, VIP, customer, boss)
 - [ ] iOS Contacts integration (Phase 3)
 - [ ] Contact sync from Outlook (Phase 3)
 

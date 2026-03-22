@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1773107471121-3271vy4",
+    "userId": "test-user-card14",
+    "emailId": "old-expired-email",
+    "sender": "old@example.com",
+    "subject": "Old Email",
+    "receivedAt": 1770083471120,
+    "queuedAt": 1773107471121,
+    "reason": "Expired email"
+  },
+  {
+    "id": "1773107471134-z245wdh",
+    "userId": "test-user-card14",
+    "emailId": "email-2",
+    "sender": "jane@company.com",
+    "subject": "Subject 2",
+    "receivedAt": 1773107471125,
+    "queuedAt": 1773107471134,
+    "reason": "Sender preference is pull, Not a VIP sender, No time-sensitive keywords, Not a direct recipient, Not high importance"
+  },
+  {
+    "id": "1773107471153-bsqvi1t",
+    "userId": "test-user-card14",
+    "emailId": "email-3",
+    "sender": "bob@personal.com",
+    "subject": "Subject 3",
+    "receivedAt": 1773107471149,
+    "queuedAt": 1773107471153,
+    "reason": "Sender preference is pull, Not a VIP sender, No time-sensitive keywords, Not a direct recipient, Not high importance"
+  }
+]

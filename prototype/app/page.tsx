@@ -2,6 +2,7 @@ import { Header } from '@/components/Header';
 import { SearchInterface } from '@/components/SearchInterface';
 import { OneDriveTest } from '@/components/OneDriveTest';
 import { OnboardingWrapper } from '@/components/OnboardingWrapper';
+import { LineTestPanel } from '@/components/LineTestPanel';
 
 export default function Home() {
   return (
@@ -14,6 +15,10 @@ export default function Home() {
             <OneDriveTest />
           </div>
         </OnboardingWrapper>
+
+        <div className="mt-8">
+          <LineTestPanel />
+        </div>
 
         <section className="mt-8 bg-gray-100 rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Prototype Status</h2>

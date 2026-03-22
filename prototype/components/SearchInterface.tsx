@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { TopicClusterView } from './graph/TopicClusterView';
+import { TopicLineView } from './graph/TopicLineView';
 
 interface ToolTraceEntry {
   tool: string;
@@ -62,8 +62,8 @@ export function SearchInterface() {
   const [response, setResponse] = useState<AgentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // View mode state: 'chat' or 'clusters'
-  const [viewMode, setViewMode] = useState<'chat' | 'clusters'>('chat');
+  // View mode state: 'chat' or 'lines'
+  const [viewMode, setViewMode] = useState<'chat' | 'lines'>('chat');
 
   // Conversation state
   const [conversationHistory, setConversationHistory] = useState<Message[]>([]);
@@ -153,7 +153,7 @@ export function SearchInterface() {
       <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-gray-800">
-            {viewMode === 'chat' ? 'Email Assistant' : 'Topic Clusters'}
+            {viewMode === 'chat' ? 'Email Assistant' : 'Topic Lines'}
           </h2>
           {/* View mode toggle */}
           <div className="flex bg-gray-100 rounded-lg p-1">
@@ -168,14 +168,14 @@ export function SearchInterface() {
               Chat
             </button>
             <button
-              onClick={() => setViewMode('clusters')}
+              onClick={() => setViewMode('lines')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                viewMode === 'clusters'
+                viewMode === 'lines'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Clusters
+              Lines
             </button>
           </div>
         </div>
@@ -190,10 +190,10 @@ export function SearchInterface() {
       </div>
 
       {/* Content area */}
-      {viewMode === 'clusters' ? (
-        /* Topic Cluster View */
+      {viewMode === 'lines' ? (
+        /* Topic Line View */
         <div className="flex-1 overflow-y-auto">
-          <TopicClusterView />
+          <TopicLineView />
         </div>
       ) : (
         <>

@@ -1,42 +1,42 @@
 /**
- * Topic Cluster View Component
+ * Topic Line View Component
  *
- * Enhanced view with timeline visualization for exploring email clusters.
- * Shows cluster sidebar and timeline with message bubbles, connections, and auto-zoom.
+ * Enhanced view with timeline visualization for exploring email lines.
+ * Shows line sidebar and timeline with message bubbles, connections, and auto-zoom.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ClusterSidebar } from './ClusterSidebar';
+import { LineSidebar } from './LineSidebar';
 import { TimelineView } from './TimelineView';
 import { useTimelineData } from '@/hooks/useTimelineData';
-import { TopicCluster } from '@/services/graph/types';
+import { TopicLine } from '@/services/graph/types';
 
-interface TopicClusterViewProps {
-  onClusterClick?: (cluster: TopicCluster) => void;
+interface TopicLineViewProps {
+  onLineClick?: (line: TopicLine) => void;
 }
 
-export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
-  const [clusters, setClusters] = useState<TopicCluster[]>([]);
+export function TopicLineView({ onLineClick }: TopicLineViewProps) {
+  const [lines, setLines] = useState<TopicLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(0.65);
   const [timeRange, setTimeRange] = useState<'30d' | '90d' | '180d' | '365d' | 'all'>('30d');
   const [progress, setProgress] = useState<{
     emailCount: number;
-    clusterCount: number;
-    clusteredEmails: number;
-    oldestClusteredDate: string | null;
+    lineCount: number;
+    linedEmails: number;
+    oldestLinedDate: string | null;
   } | null>(null);
 
   // Use timeline data hook
-  const { emails, cluster, loading: timelineLoading, error: timelineError } = useTimelineData(selectedClusterId);
+  const { emails, line, loading: timelineLoading, error: timelineError } = useTimelineData(selectedLineId);
 
-  // Fetch clusters on mount
+  // Fetch lines on mount
   useEffect(() => {
-    fetchClusters();
+    fetchLines();
     fetchProgress();
   }, []);
 
@@ -50,11 +50,11 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
       const data = await response.json();
       setProgress(data);
     } catch (err) {
-      console.error('[TopicClusterView] Error fetching progress:', err);
+      console.error('[TopicLineView] Error fetching progress:', err);
     }
   };
 
-  const fetchClusters = async () => {
+  const fetchLines = async () => {
     setLoading(true);
     setError(null);
 
@@ -62,25 +62,25 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
       const response = await fetch('/api/graph/topics');
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch clusters: ${response.statusText}`);
+        throw new Error(`Failed to fetch lines: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setClusters(data.clusters || []);
+      setLines(data.lines || []);
     } catch (err) {
-      console.error('[TopicClusterView] Error fetching clusters:', err);
+      console.error('[TopicLineView] Error fetching lines:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClusterSelect = (selectedCluster: TopicCluster) => {
-    setSelectedClusterId(selectedCluster.id);
-    onClusterClick?.(selectedCluster);
+  const handleLineSelect = (selectedLine: TopicLine) => {
+    setSelectedLineId(selectedLine.id);
+    onLineClick?.(selectedLine);
   };
 
-  const triggerClustering = async () => {
+  const triggerLineing = async () => {
     setLoading(true);
     setError(null);
 
@@ -103,7 +103,7 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'cluster',
+          action: 'line',
           threshold: threshold,
           limit: 100,
           startDate,
@@ -112,52 +112,52 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to cluster emails: ${response.statusText}`);
+        throw new Error(`Failed to line emails: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setClusters(data.clusters || []);
-      // Refresh progress after clustering
+      setLines(data.lines || []);
+      // Refresh progress after lining
       await fetchProgress();
     } catch (err) {
-      console.error('[TopicClusterView] Error clustering:', err);
+      console.error('[TopicLineView] Error lining:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && clusters.length === 0) {
+  if (loading && lines.length === 0) {
     return (
       <div className="p-6 text-center text-gray-500">
-        Loading topic clusters...
+        Loading topic lines...
       </div>
     );
   }
 
   return (
     <div className="flex h-[650px]">
-      {/* Cluster Sidebar */}
+      {/* Line Sidebar */}
       <div className="w-80 border-r border-gray-200 bg-gray-50 p-4 overflow-y-auto flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Clusters</h2>
-          <span className="text-sm text-gray-500">{clusters.length}</span>
+          <h2 className="text-lg font-semibold text-gray-900">Lines</h2>
+          <span className="text-sm text-gray-500">{lines.length}</span>
         </div>
 
-        {clusters.length === 0 && !loading && (
+        {lines.length === 0 && !loading && (
           <div className="text-center py-8">
-            <p className="text-gray-600 mb-4">No clusters yet</p>
+            <p className="text-gray-600 mb-4">No lines yet</p>
             <button
-              onClick={triggerClustering}
+              onClick={triggerLineing}
               disabled={loading}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300"
             >
-              Cluster Emails
+              Line Emails
             </button>
           </div>
         )}
 
-        {clusters.length > 0 && (
+        {lines.length > 0 && (
           <>
             {/* Threshold selector */}
             <div className="mb-3">
@@ -193,34 +193,34 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
             {progress && (
               <div className="mb-3 p-2 bg-gray-100 rounded text-xs">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Clusters:</span>
-                  <span className="font-medium">{progress.clusterCount}</span>
+                  <span className="text-gray-600">Lines:</span>
+                  <span className="font-medium">{progress.lineCount}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Emails clustered:</span>
-                  <span className="font-medium">{progress.clusteredEmails}/{progress.emailCount}</span>
+                  <span className="text-gray-600">Emails lined:</span>
+                  <span className="font-medium">{progress.linedEmails}/{progress.emailCount}</span>
                 </div>
-                {progress.oldestClusteredDate && (
+                {progress.oldestLinedDate && (
                   <div className="flex justify-between mt-1">
-                    <span className="text-gray-600">Oldest clustered:</span>
-                    <span className="font-medium">{new Date(progress.oldestClusteredDate).toLocaleDateString()}</span>
+                    <span className="text-gray-600">Oldest lined:</span>
+                    <span className="font-medium">{new Date(progress.oldestLinedDate).toLocaleDateString()}</span>
                   </div>
                 )}
               </div>
             )}
 
             <button
-              onClick={triggerClustering}
+              onClick={triggerLineing}
               disabled={loading}
               className="w-full mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 text-sm"
             >
-              {loading ? 'Clustering...' : 'Cluster New Emails'}
+              {loading ? 'Lining...' : 'Line New Emails'}
             </button>
 
-            <ClusterSidebar
-              clusters={clusters}
-              selectedClusterId={selectedClusterId}
-              onClusterSelect={handleClusterSelect}
+            <LineSidebar
+              lines={lines}
+              selectedLineId={selectedLineId}
+              onLineSelect={handleLineSelect}
             />
           </>
         )}
@@ -228,21 +228,21 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {!selectedClusterId && (
+        {!selectedLineId && (
           <div className="flex-1 flex items-center justify-center bg-gray-50">
             <div className="text-center">
               <div className="text-5xl mb-4">📋</div>
               <h3 className="text-xl font-medium text-gray-900 mb-2">
-                Select a Cluster
+                Select a Line
               </h3>
               <p className="text-sm text-gray-500 max-w-sm mx-auto">
-                Choose a cluster from the sidebar to view its timeline
+                Choose a line from the sidebar to view its timeline
               </p>
             </div>
           </div>
         )}
 
-        {selectedClusterId && timelineLoading && (
+        {selectedLineId && timelineLoading && (
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -251,14 +251,14 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
           </div>
         )}
 
-        {selectedClusterId && timelineError && (
+        {selectedLineId && timelineError && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="text-5xl mb-4">⚠️</div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">Error</h3>
               <p className="text-sm text-red-600">{timelineError}</p>
               <button
-                onClick={() => setSelectedClusterId(null)}
+                onClick={() => setSelectedLineId(null)}
                 className="mt-4 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
               >
                 Go Back
@@ -267,9 +267,9 @@ export function TopicClusterView({ onClusterClick }: TopicClusterViewProps) {
           </div>
         )}
 
-        {selectedClusterId && cluster && !timelineLoading && !timelineError && (
+        {selectedLineId && line && !timelineLoading && !timelineError && (
           <TimelineView
-            cluster={cluster}
+            line={line}
             emails={emails}
           />
         )}

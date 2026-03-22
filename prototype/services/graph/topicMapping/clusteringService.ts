@@ -48,8 +48,8 @@ export class TopicClusteringService extends GLMClient {
   }
 
   /**
-   * Cluster emails by semantic similarity
-   * Uses hierarchical clustering with configurable threshold
+   * Cluster emails by thread first, then semantic similarity for orphans
+   * Uses conversationId from Microsoft Graph as primary clustering key
    */
   async clusterEmails(
     emails: EmailNode[],
@@ -62,56 +62,149 @@ export class TopicClusteringService extends GLMClient {
 
     console.log(`[TopicClusteringService] Clustering ${emails.length} emails with threshold ${threshold}`);
 
-    // Step 1: Analyze all emails (or use existing analysis)
-    const emailsWithAnalysis: EmailWithAnalysis[] = [];
-    for (let i = 0; i < emails.length; i++) {
-      const email = emails[i];
+    // Step 1: Group emails by conversationId (thread) first
+    const threadGroups = new Map<string, EmailNode[]>();
+    const orphanEmails: EmailNode[] = [];
 
-      // Check if email already has analysis data
-      if (email.topics.length > 0 || email.keywords.length > 0) {
-        emailsWithAnalysis.push({
-          email,
-          analysis: {
-            concepts: [],
-            topics: email.topics,
-            entities: email.entities,
-            sentiment: email.sentiment || 'neutral',
-            keywords: email.keywords,
-            summary: email.bodyPreview || '',
-            conversationType: 'informational',
-            urgency: 'medium',
-          },
-          index: i,
-        });
+    for (const email of emails) {
+      const convId = email.conversationId;
+      if (convId) {
+        if (!threadGroups.has(convId)) {
+          threadGroups.set(convId, []);
+        }
+        threadGroups.get(convId)!.push(email);
       } else {
-        // Need to analyze
+        // Email without conversationId is an orphan
+        orphanEmails.push(email);
+      }
+    }
+
+    console.log(`[TopicClusteringService] Found ${threadGroups.size} existing threads, ${orphanEmails.length} orphans`);
+
+    // Step 2: Create clusters from threads (one cluster per thread)
+    const threadClusters: TopicCluster[] = [];
+    const now = Date.now();
+
+    for (const [conversationId, threadEmails] of threadGroups.entries()) {
+      if (threadEmails.length === 0) continue;
+
+      // Sort emails by date within the thread
+      threadEmails.sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      const dates = threadEmails.map(e => new Date(e.date).getTime());
+      const incomingCount = threadEmails.filter(e => e.direction === 'incoming').length;
+      const outgoingCount = threadEmails.filter(e => e.direction === 'outgoing').length;
+      const hasOutgoing = outgoingCount > 0;
+
+      // Determine thread status
+      let threadStatus: 'incoming_only' | 'replied' | 'ongoing';
+      if (!hasOutgoing) {
+        threadStatus = 'incoming_only';
+      } else if (incomingCount > 0) {
+        threadStatus = 'ongoing';
+      } else {
+        threadStatus = 'replied';
+      }
+
+      const cluster: TopicCluster = {
+        id: `cluster-thread-${conversationId}`,  // Use FULL conversationId to avoid collisions
+        name: this.generateThreadName(threadEmails),
+        description: `Thread with ${threadEmails.length} emails`,
+        centroidEmbedding: [],
+        emailIds: threadEmails.map(e => e.id),
+        subjectVariations: this.extractSubjectVariations(threadEmails),
+        firstEmailDate: new Date(Math.min(...dates)).toISOString(),
+        lastEmailDate: new Date(Math.max(...dates)).toISOString(),
+        confidence: 1.0, // High confidence - confirmed thread from Microsoft Graph
+        userConfirmed: true,
+        createdAt: now,
+        updatedAt: now,
+        // Thread completeness status
+        hasOutgoing,
+        threadStatus,
+        incomingCount,
+        outgoingCount,
+      };
+
+      threadClusters.push(cluster);
+    }
+
+    console.log(`[TopicClusteringService] Created ${threadClusters.length} thread clusters`);
+
+    // Step 3: Handle orphaned emails using semantic similarity
+    if (orphanEmails.length > 0) {
+      console.log(`[TopicClusteringService] Analyzing ${orphanEmails.length} orphaned emails for semantic clustering...`);
+
+      // Analyze orphans for semantic similarity
+      const emailsWithAnalysis: EmailWithAnalysis[] = [];
+      for (let i = 0; i < orphanEmails.length; i++) {
+        const email = orphanEmails[i];
         const analysis = await this.embeddingService.analyzeEmail(email);
+
         emailsWithAnalysis.push({
           email,
           analysis,
           index: i,
         });
+
+        console.log(`[TopicClusteringService] Analyzed orphan ${i + 1}/${orphanEmails.length}: concepts=${analysis.concepts.length}`);
       }
+
+      // Calculate similarity matrix for orphans
+      const similarityMatrix = this.calculateSimilarityMatrix(emailsWithAnalysis);
+
+      // Cluster orphans with lower threshold (more permissive)
+      const orphanThreshold = Math.max(0.3, threshold * 0.5);
+      const orphanAssignments = this.hierarchicalClustering(
+        emailsWithAnalysis,
+        similarityMatrix,
+        orphanThreshold
+      );
+
+      // Create clusters from orphan assignments
+      const orphanClusters = await this.createTopicClusters(
+        emailsWithAnalysis,
+        orphanAssignments
+      );
+
+      console.log(`[TopicClusteringService] Created ${orphanClusters.length} orphan clusters`);
+
+      // Combine all clusters
+      return [...threadClusters, ...orphanClusters];
     }
 
-    // Step 2: Calculate similarity matrix
-    const similarityMatrix = this.calculateSimilarityMatrix(emailsWithAnalysis);
+    // No orphans - just return thread clusters
+    return threadClusters;
+  }
 
-    // Step 3: Perform hierarchical clustering
-    const clusterAssignments = this.hierarchicalClustering(
-      emailsWithAnalysis,
-      similarityMatrix,
-      threshold
-    );
+  /**
+   * Generate a name for a thread cluster
+   */
+  private generateThreadName(emails: EmailNode[]): string {
+    if (emails.length === 0) return 'Empty Thread';
 
-    // Step 4: Extract topics and names using GLM-5
-    const clusters = await this.createTopicClusters(
-      emailsWithAnalysis,
-      clusterAssignments
-    );
+    // Use the first email's subject as the base, cleaned up
+    const firstSubject = emails[0].subject;
 
-    console.log(`[TopicClusteringService] Created ${clusters.length} topic clusters`);
-    return clusters;
+    // Remove common prefixes and markers
+    let cleanSubject = firstSubject
+      // Email reply/forward prefixes
+      .replace(/^(RE|FW|Fwd):\s*/gi, '')
+      // Calendar response prefixes
+      .replace(/^(Accepted|Canceled|Declined|Tentative):\s*/gi, '')
+      // External markers (various formats)
+      .replace(/^EXTERNAL\s*[-:]?\s*/gi, '')
+      .replace(/^\[External\]\s*/gi, '')
+      .replace(/^RE:\s*\[External\]\s*/gi, '')
+      .replace(/^FW:\s*\[External\]\s*/gi, '')
+      // Clean up asterisks and extra spaces
+      .replace(/\s*\*/g, ' ')
+      .trim();
+
+    // Truncate to match normalizeThreadName in clusteringTestService (no ellipsis)
+    return cleanSubject.substring(0, 50);
   }
 
   /**
@@ -258,7 +351,7 @@ export class TopicClusteringService extends GLMClient {
       const { name, description } = await this.generateClusterName(emails, analyses);
 
       // Calculate confidence score
-      const confidence = this.calculateClusterConfidence(group);
+      const confidence = this.calculateClusterConfidence(group, false);
 
       clusters.push({
         id: `cluster-${clusterId}-${Date.now()}`,
@@ -373,14 +466,18 @@ Return JSON in this format:
   }
 
   /**
-   * Calculate confidence score for a cluster
-   * Based on internal similarity and coherence
+   * Calculate confidence score for a cluster (thread or orphan)
+   * Thread clusters have confidence 1.0 by default
    */
-  private calculateClusterConfidence(group: EmailWithAnalysis[]): number {
+  private calculateClusterConfidence(
+    group: EmailWithAnalysis[],
+    isThreadCluster: boolean
+  ): number {
     if (group.length === 0) return 0;
     if (group.length === 1) return 1.0;
 
-    // Calculate average pairwise similarity
+    // For thread clusters, confidence is based on thread structure (Microsoft Graph)
+    // For orphan clusters, use average pairwise similarity
     let totalSimilarity = 0;
     let count = 0;
 

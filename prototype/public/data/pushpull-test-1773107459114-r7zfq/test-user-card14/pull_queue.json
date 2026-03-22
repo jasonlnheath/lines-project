@@ -1,0 +1,12 @@
+[
+  {
+    "id": "1773107459123-bj64z0o",
+    "userId": "test-user-card14",
+    "emailId": "email-1",
+    "sender": "john@company.com",
+    "subject": "Subject 1",
+    "receivedAt": 1773107459122,
+    "queuedAt": 1773107459123,
+    "reason": "Sender preference is pull, Not a VIP sender, No time-sensitive keywords, Not a direct recipient, Not high importance"
+  },
+  {

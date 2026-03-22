@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 export function Header() {
@@ -17,6 +18,12 @@ export function Header() {
           <div className="text-sm text-gray-500">Loading...</div>
         ) : authenticated ? (
           <>
+            <Link
+              href="/settings"
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              Settings
+            </Link>
             <div className="text-sm">
               <span className="font-medium">{user?.displayName}</span>
               <span className="text-gray-500 ml-2">({user?.email})</span>

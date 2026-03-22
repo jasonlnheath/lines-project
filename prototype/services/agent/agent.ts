@@ -290,6 +290,11 @@ Available tools:
   * Required: emailId
   * Example: {"tool": "summarize", "args": {"emailId": "ABC123"}}
 
+- cluster_validate: Validate email clustering against real Microsoft Graph thread data (last 30 days)
+  * Use when asked about clustering quality, why clustering isn't working, missing clusters, or name accuracy
+  * Optional: action ("thread-stats" | "validate" | "full", default "full")
+  * Example: {"tool": "cluster_validate", "args": {"action": "full"}}
+
 IMPORTANT guidelines:
 1. For "how many emails" questions: use fetch tool, report the "total" field
 2. For broad questions like "show me recent emails": use fetch with limit, show "returned" emails

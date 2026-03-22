@@ -3,10 +3,16 @@
  *
  * Evaluates emails against push rules to determine if they should trigger
  * immediate notification.
+ *
+ * Now enhanced with relationship context from the contact system.
  */
 
 import { PushPullService } from './pushPullService';
 import { VIPSender, TimeSensitiveKeyword } from './types';
+import {
+  getRelationshipContextProvider,
+  PushDecisionWithContext,
+} from '../contacts';
 
 /**
  * Result of push trigger evaluation
@@ -15,6 +21,8 @@ export interface PushTriggerResult {
   shouldPush: boolean;
   reasons: string[];
   matchedRules: string[];
+  priority?: 'high' | 'medium' | 'low';
+  contactContext?: unknown; // Contact context if available
 }
 
 /**
@@ -69,15 +77,18 @@ const DEFAULT_KEYWORDS = [
  * Push Trigger Service
  *
  * Evaluates emails against multiple push trigger conditions:
- * 1. High importance flag
- * 2. Direct recipient (To field)
- * 3. VIP sender
- * 4. Time-sensitive keywords in subject or body
- * 5. Custom trigger rules
+ * 1. CYA Rules (Cover Your Ass) - manager, executives always push
+ * 2. Contact preferences - user-taught push/pull
+ * 3. High importance flag
+ * 4. Direct recipient (To field)
+ * 5. VIP sender
+ * 6. Time-sensitive keywords in subject or body
+ * 7. Custom trigger rules
  */
 export class PushTriggerService {
   private pushPullService: PushPullService;
   private config: PushTriggerConfig | null = null;
+  private contextProvider = getRelationshipContextProvider();
 
   constructor(pushPullService?: PushPullService) {
     this.pushPullService = pushPullService ?? new PushPullService();
@@ -92,10 +103,53 @@ export class PushTriggerService {
 
   /**
    * Evaluate an email for push triggers
+   * Enhanced with contact relationship context
    */
   async evaluate(userId: string, email: EmailForTrigger): Promise<PushTriggerResult> {
     const reasons: string[] = [];
     const matchedRules: string[] = [];
+
+    // 0. Check contact context first (CYA + user preferences)
+    const contactDecision = this.contextProvider.getPushDecision(email.sender, {
+      isDirectRecipient: email.toRecipients.some(
+        (r) => r.toLowerCase() === userId.toLowerCase()
+      ),
+      hasUrgentKeywords: this.hasUrgentKeywords(email.subject, email.body),
+      isHighImportance: email.importance === 'high',
+    });
+
+    // CYA rules (highest priority)
+    if (contactDecision.reason === 'your_manager' || contactDecision.reason === 'executive') {
+      return {
+        shouldPush: true,
+        reasons: [contactDecision.reason],
+        matchedRules: [`contact:${contactDecision.reason}`],
+        priority: contactDecision.priority,
+        contactContext: contactDecision.contactContext,
+      };
+    }
+
+    // User's explicit push preference
+    if (contactDecision.reason === 'user_designated_push') {
+      return {
+        shouldPush: true,
+        reasons: ['user-designated push'],
+        matchedRules: ['contact:user_designated_push'],
+        priority: contactDecision.priority,
+        contactContext: contactDecision.contactContext,
+      };
+    }
+
+    // User's explicit pull preference (skip other checks)
+    if (contactDecision.reason === 'user_designated_pull') {
+      return {
+        shouldPush: false,
+        reasons: ['user-designated pull'],
+        matchedRules: ['contact:user_designated_pull'],
+        priority: 'low',
+        contactContext: contactDecision.contactContext,
+      };
+    }
 
     // 1. Check high importance flag
     if (email.importance === 'high') {
@@ -140,11 +194,33 @@ export class PushTriggerService {
       }
     }
 
+    // 6. Apply contact-based decision if no other rules matched
+    if (reasons.length === 0 && contactDecision.reason !== 'default_pull') {
+      // Use contact decision as fallback
+      return {
+        shouldPush: contactDecision.shouldPush,
+        reasons: [contactDecision.reason],
+        matchedRules: [`contact:${contactDecision.reason}`],
+        priority: contactDecision.priority,
+        contactContext: contactDecision.contactContext,
+      };
+    }
+
     return {
       shouldPush: reasons.length > 0,
       reasons,
       matchedRules,
+      priority: contactDecision.priority,
+      contactContext: contactDecision.contactContext,
     };
+  }
+
+  /**
+   * Check for urgent keywords (used for contact decision)
+   */
+  private hasUrgentKeywords(subject: string, body?: string): boolean {
+    const text = `${subject} ${body || ''}`.toLowerCase();
+    return DEFAULT_KEYWORDS.some((keyword) => text.includes(keyword));
   }
 
   /**
@@ -275,6 +351,36 @@ export class PushTriggerService {
     }
 
     return rule;
+  }
+
+  /**
+   * Get all custom rules for a user
+   */
+  async getCustomRules(userId: string): Promise<CustomTriggerRule[]> {
+    if (!this.config) {
+      return [];
+    }
+    return this.config.customRules.filter((r) => r.userId === userId);
+  }
+
+  /**
+   * Remove a custom trigger rule
+   */
+  async removeCustomRule(userId: string, ruleId: string): Promise<boolean> {
+    if (!this.config) {
+      return false;
+    }
+
+    const index = this.config.customRules.findIndex(
+      (r) => r.id === ruleId && r.userId === userId
+    );
+
+    if (index < 0) {
+      return false;
+    }
+
+    this.config.customRules.splice(index, 1);
+    return true;
   }
 
   /**

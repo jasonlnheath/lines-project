@@ -1,18 +1,18 @@
 /**
  * TimelineView Component
  * Horizontal timeline with auto-zoom (messages expand/contract on scroll)
- * Cluster width stays fixed unless window height changes
+ * Line width stays fixed unless window height changes
  */
 
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { EmailNode, TopicCluster, TimelineEvent } from '@/services/graph/types';
+import { EmailNode, TopicLine, TimelineEvent } from '@/services/graph/types';
 import { TimelineMessage } from './TimelineMessage';
 import { TimelineConnection } from './TimelineConnection';
 
 interface TimelineViewProps {
-  cluster: TopicCluster;
+  line: TopicLine;
   emails: EmailNode[];
   className?: string;
 }
@@ -116,7 +116,7 @@ function calculateAutoZoomHeight(
   return Math.max(minHeight, Math.min(scaledHeight, maxHeight));
 }
 
-export function TimelineView({ cluster, emails, className = '' }: TimelineViewProps) {
+export function TimelineView({ line, emails, className = '' }: TimelineViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(MIN_TIMELINE_WIDTH);
@@ -291,22 +291,22 @@ export function TimelineView({ cluster, emails, className = '' }: TimelineViewPr
   if (emails.length === 0) {
     return (
       <div className={'flex items-center justify-center h-64 text-gray-500 ' + className}>
-        No emails in this cluster
+        No emails in this line
       </div>
     );
   }
 
   return (
     <div className={'flex flex-col h-full ' + className}>
-      {/* Cluster header */}
+      {/* Line header */}
       <div className="px-4 py-2 bg-gray-50 border-b">
-        <h3 className="font-semibold text-gray-900">{cluster.name}</h3>
-        <p className="text-sm text-gray-600">{cluster.description}</p>
+        <h3 className="font-semibold text-gray-900">{line.name}</h3>
+        <p className="text-sm text-gray-600">{line.description}</p>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs text-gray-500">{emails.length} email{emails.length !== 1 ? 's' : ''}</span>
           <span className="text-xs text-gray-400">•</span>
           <span className="text-xs text-gray-500">
-            Confidence: {Math.round(cluster.confidence * 100)}%
+            Confidence: {Math.round(line.confidence * 100)}%
           </span>
           {emails.length > 1 && (
             <>

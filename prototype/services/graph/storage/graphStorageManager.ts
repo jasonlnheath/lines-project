@@ -11,9 +11,12 @@
 import { FilesystemGraphStore } from './filesystemStore';
 import {
   EmailNode,
+  TopicLine,
   TopicCluster,
   UserGraphPreferences,
   EmailKnowledgeGraph,
+  Suggestion,
+  BranchRecord,
 } from '../types';
 
 /**
@@ -118,59 +121,85 @@ export class GraphStorageManager {
   }
 
   /**
-   * Get all topic clusters
+   * Get all emails
    */
-  async getTopicClusters(): Promise<TopicCluster[]> {
+  async getAllEmails(): Promise<EmailNode[]> {
+    const graph = await this.loadGraph();
+    if (!graph) return [];
+    return Array.from(graph.emails.values());
+  }
+
+  /**
+   * Get all topic lines
+   */
+  async getTopicLines(): Promise<TopicLine[]> {
     const graph = await this.loadGraph();
     if (!graph) return [];
 
-    return Array.from(graph.topicClusters.values())
+    return Array.from(graph.topicLines.values())
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /**
-   * Get a specific topic cluster by ID
+   * Get a specific topic line by ID
    */
-  async getTopicCluster(clusterId: string): Promise<TopicCluster | null> {
+  async getTopicLine(lineId: string): Promise<TopicLine | null> {
     const graph = await this.loadGraph();
-    return graph?.topicClusters.get(clusterId) || null;
+    return graph?.topicLines.get(lineId) || null;
   }
 
   /**
-   * Get emails in a topic cluster
+   * Get emails in a topic line
    */
+  async getEmailsInLine(lineId: string): Promise<EmailNode[]> {
+    const line = await this.getTopicLine(lineId);
+    if (!line) return [];
+
+    return this.getEmails(line.emailIds);
+  }
+
+  /**
+   * Add or update a topic line
+   */
+  async saveTopicLine(line: TopicLine): Promise<void> {
+    return this.backend.updateTopicLine(this.userId, line);
+  }
+
+  /**
+   * Delete a topic line
+   */
+  async deleteTopicLine(lineId: string): Promise<void> {
+    return this.backend.deleteTopicLine(this.userId, lineId);
+  }
+
+  // Backward compatibility aliases
+  async getTopicClusters(): Promise<TopicCluster[]> {
+    return this.getTopicLines();
+  }
+
+  async getTopicCluster(clusterId: string): Promise<TopicCluster | null> {
+    return this.getTopicLine(clusterId);
+  }
+
   async getEmailsInCluster(clusterId: string): Promise<EmailNode[]> {
-    const cluster = await this.getTopicCluster(clusterId);
-    if (!cluster) return [];
-
-    return this.getEmails(cluster.emailIds);
+    return this.getEmailsInLine(clusterId);
   }
 
-  /**
-   * Add or update a topic cluster
-   */
   async saveTopicCluster(cluster: TopicCluster): Promise<void> {
-    return this.backend.updateTopicCluster(this.userId, cluster);
-  }
-
-  /**
-   * Delete a topic cluster
-   */
-  async deleteTopicCluster(clusterId: string): Promise<void> {
-    return this.backend.deleteTopicCluster(this.userId, clusterId);
+    return this.saveTopicLine(cluster);
   }
 
   /**
    * Search emails by topic keyword
    */
-  async searchTopics(keyword: string): Promise<TopicCluster[]> {
-    const clusters = await this.getTopicClusters();
+  async searchTopics(keyword: string): Promise<TopicLine[]> {
+    const lines = await this.getTopicLines();
     const lowerKeyword = keyword.toLowerCase();
 
-    return clusters.filter(cluster =>
-      cluster.name.toLowerCase().includes(lowerKeyword) ||
-      cluster.description.toLowerCase().includes(lowerKeyword) ||
-      cluster.subjectVariations.some(s => s.toLowerCase().includes(lowerKeyword))
+    return lines.filter(line =>
+      line.name.toLowerCase().includes(lowerKeyword) ||
+      line.description.toLowerCase().includes(lowerKeyword) ||
+      line.subjectVariations.some(s => s.toLowerCase().includes(lowerKeyword))
     );
   }
 
@@ -186,7 +215,7 @@ export class GraphStorageManager {
       manualSplits: {},
       timelineView: 'chronological',
       showBranches: true,
-      clusterConfidenceThreshold: 0.5,
+      lineConfidenceThreshold: 0.5,
       expandSearchByTopic: true,
       topicExpansionLimit: 3,
       updatedAt: Date.now(),
@@ -212,7 +241,7 @@ export class GraphStorageManager {
    */
   async getStats(): Promise<{
     emailCount: number;
-    topicClusterCount: number;
+    topicLineCount: number;
     connectionCount: number;
     lastUpdated: number;
   } | null> {
@@ -221,7 +250,7 @@ export class GraphStorageManager {
 
     return {
       emailCount: graph.emails.size,
-      topicClusterCount: graph.topicClusters.size,
+      topicLineCount: graph.topicLines.size,
       connectionCount: graph.connections.size,
       lastUpdated: graph.lastUpdated,
     };
@@ -235,7 +264,7 @@ export class GraphStorageManager {
     if (!graph) return [];
 
     const clusteredEmailIds = new Set<string>();
-    for (const cluster of graph.topicClusters.values()) {
+    for (const cluster of graph.topicLines.values()) {
       for (const emailId of cluster.emailIds) {
         clusteredEmailIds.add(emailId);
       }
@@ -263,7 +292,7 @@ export class GraphStorageManager {
       graph = {
         emails: new Map(),
         connections: new Map(),
-        topicClusters: new Map(),
+        topicLines: new Map(),
         threadBranches: new Map(),
         emailByConversation: new Map(),
         emailByTopic: new Map(),
@@ -303,5 +332,84 @@ export class GraphStorageManager {
    */
   async clearGraph(): Promise<void> {
     return this.backend.deleteGraph(this.userId);
+  }
+
+  /**
+   * Get suggestion queue for user
+   */
+  async getSuggestionQueue(): Promise<Suggestion[]> {
+    return this.backend.loadSuggestionQueue(this.userId);
+  }
+
+  /**
+   * Save suggestion queue for user
+   */
+  async saveSuggestionQueue(suggestions: Suggestion[]): Promise<void> {
+    return this.backend.saveSuggestionQueue(this.userId, suggestions);
+  }
+
+  /**
+   * Add a single suggestion to the queue
+   */
+  async addSuggestion(suggestion: Suggestion): Promise<void> {
+    const queue = await this.getSuggestionQueue();
+    queue.push(suggestion);
+    await this.saveSuggestionQueue(queue);
+  }
+
+  /**
+   * Update suggestion status
+   */
+  async updateSuggestionStatus(
+    suggestionId: string,
+    status: 'accepted' | 'rejected'
+  ): Promise<void> {
+    const queue = await this.getSuggestionQueue();
+    const suggestion = queue.find(s => s.id === suggestionId);
+    if (suggestion) {
+      suggestion.status = status;
+      await this.saveSuggestionQueue(queue);
+    }
+  }
+
+  /**
+   * Get branching history for user
+   */
+  async getBranchingHistory(): Promise<BranchRecord[]> {
+    return this.backend.loadBranchingHistory(this.userId);
+  }
+
+  /**
+   * Save a branch record
+   */
+  async saveBranchingHistory(record: BranchRecord): Promise<void> {
+    const history = await this.getBranchingHistory();
+    history.push(record);
+    await this.backend.saveBranchingHistory(this.userId, history);
+  }
+
+  /**
+   * Get cluster with enriched semantic profile
+   */
+  async getClusterWithProfile(clusterId: string): Promise<{
+    cluster: TopicCluster;
+    profile?: {
+      keyTerms: string[];
+      emailCount: number;
+      lastUpdated: number;
+    };
+  } | null> {
+    const cluster = await this.getTopicCluster(clusterId);
+    if (!cluster) return null;
+
+    // Return cluster with profile metadata
+    return {
+      cluster,
+      profile: cluster.keyTerms ? {
+        keyTerms: cluster.keyTerms,
+        emailCount: cluster.emailIds.length,
+        lastUpdated: cluster.updatedAt,
+      } : undefined,
+    };
   }
 }

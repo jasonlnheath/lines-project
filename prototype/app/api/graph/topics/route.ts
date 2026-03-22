@@ -1,24 +1,24 @@
 /**
  * Topics API Endpoint
  *
- * CRUD operations for topic clusters in the email knowledge graph.
+ * CRUD operations for topic lines in the email knowledge graph.
  *
  * Endpoints:
- * GET  /api/graph/topics - Get all topic clusters
- * GET  /api/graph/topics/[id] - Get specific topic cluster
- * POST /api/graph/topics/cluster - Trigger clustering on unclustered emails
- * DELETE /api/graph/topics/[id] - Delete a topic cluster
+ * GET  /api/graph/topics - Get all topic lines
+ * GET  /api/graph/topics/[id] - Get specific topic line
+ * POST /api/graph/topics/line - Trigger lining on unlined emails
+ * DELETE /api/graph/topics/[id] - Delete a topic line
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { GraphStorageManager } from '@/services/graph/storage/graphStorageManager';
-import { TopicClusteringService } from '@/services/graph/topicMapping/clusteringService';
-import { TopicCluster } from '@/services/graph/types';
+import { TopicLineService } from '@/services/graph/topicMapping/lineService';
+import { TopicLine } from '@/services/graph/types';
 import { getUserIdFromRequest } from '../utils';
 
 /**
  * GET /api/graph/topics
- * Returns all topic clusters for current user
+ * Returns all topic lines for current user
  */
 export async function GET(request: NextRequest) {
   try {
@@ -32,11 +32,11 @@ export async function GET(request: NextRequest) {
     }
 
     const storage = new GraphStorageManager(userId);
-    const clusters = await storage.getTopicClusters();
+    const lines = await storage.getTopicLines();
 
     return NextResponse.json({
-      clusters,
-      count: clusters.length,
+      lines,
+      count: lines.length,
     });
   } catch (error) {
     console.error('[API /api/graph/topics] GET error:', error);
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/graph/topics
- * Create or update topic clusters
+ * Create or update topic lines
  */
 export async function POST(request: NextRequest) {
   try {
@@ -65,15 +65,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    if (action === 'cluster') {
-      // Trigger clustering on unclustered emails
-      return await handleClustering(userId, body);
+    if (action === 'line') {
+      // Trigger lining on unlined emails
+      return await handleLining(userId, body);
+    } else if (action === 'progress') {
+      // Get lining progress status
+      return await handleProgress(userId);
     } else if (action === 'create') {
-      // Create a new cluster manually
-      return await handleCreateCluster(userId, body);
+      // Create a new line manually
+      return await handleCreateLine(userId, body);
     } else if (action === 'update') {
-      // Update an existing cluster
-      return await handleUpdateCluster(userId, body);
+      // Update an existing line
+      return await handleUpdateLine(userId, body);
     } else {
       return NextResponse.json(
         { error: 'Invalid action', message: `Unknown action: ${action}` },
@@ -91,7 +94,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * DELETE /api/graph/topics/[id]
- * Delete a specific topic cluster
+ * Delete a specific topic line
  */
 export async function DELETE(
   request: NextRequest,
@@ -107,21 +110,21 @@ export async function DELETE(
       );
     }
 
-    const { id: clusterId } = await params;
+    const { id: lineId } = await params;
 
-    if (!clusterId) {
+    if (!lineId) {
       return NextResponse.json(
-        { error: 'Bad request', message: 'Cluster ID is required' },
+        { error: 'Bad request', message: 'Line ID is required' },
         { status: 400 }
       );
     }
 
     const storage = new GraphStorageManager(userId);
-    await storage.deleteTopicCluster(clusterId);
+    await storage.deleteTopicLine(lineId);
 
     return NextResponse.json({
       success: true,
-      message: `Cluster ${clusterId} deleted`,
+      message: `Line ${lineId} deleted`,
     });
   } catch (error) {
     console.error('[API /api/graph/topics] DELETE error:', error);
@@ -133,60 +136,140 @@ export async function DELETE(
 }
 
 /**
- * Handle clustering action
- * Clusters unclustered emails using the clustering service
+ * Handle progress request
+ * Returns lining status and statistics
  */
-async function handleClustering(userId: string, body: any) {
-  const { threshold, limit } = body;
+async function handleProgress(userId: string) {
+  const storage = new GraphStorageManager(userId);
+
+  try {
+    const lines = await storage.getTopicLines();
+    const emails = await storage.getAllEmails();
+
+    let oldestDate: string | null = null;
+    const linedIds = new Set<string>();
+
+    for (const line of lines) {
+      for (const emailId of line.emailIds) {
+        linedIds.add(emailId);
+      }
+      if (!oldestDate || line.firstEmailDate < oldestDate) {
+        oldestDate = line.firstEmailDate;
+      }
+    }
+
+    return NextResponse.json({
+      emailCount: emails.length,
+      lineCount: lines.length,
+      linedEmails: linedIds.size,
+      oldestLinedDate: oldestDate,
+    });
+  } catch (error) {
+    console.error('[API /api/graph/topics] Progress error:', error);
+    return NextResponse.json({
+      emailCount: 0,
+      lineCount: 0,
+      linedEmails: 0,
+      oldestLinedDate: null,
+    });
+  }
+}
+
+/**
+ * Handle lining action
+ * Lines unlined emails using thread-first approach
+ */
+async function handleLining(userId: string, body: any) {
+  const { threshold, limit, startDate, endDate } = body;
 
   const storage = new GraphStorageManager(userId);
-  const clusteringService = new TopicClusteringService();
+  const lineService = new TopicLineService();
 
-  // Get unclustered emails
-  let unclusteredEmails = await storage.getUnclusteredEmails();
+  // Get unlined emails
+  let unlinedEmails = await storage.getUnclusteredEmails();
 
   // Apply limit if specified
-  if (limit && unclusteredEmails.length > limit) {
-    unclusteredEmails = unclusteredEmails.slice(0, limit);
+  if (limit && unlinedEmails.length > limit) {
+    unlinedEmails = unlinedEmails.slice(0, limit);
   }
 
-  if (unclusteredEmails.length === 0) {
+  // Apply date range filter
+  let recentEmails: typeof unlinedEmails;
+
+  if (startDate || endDate) {
+    // Custom date range provided
+    recentEmails = unlinedEmails.filter(email => {
+      const emailDate = new Date(email.date);
+      if (startDate && emailDate < new Date(startDate)) return false;
+      if (endDate && emailDate > new Date(endDate)) return false;
+      return true;
+    });
+    console.log(`[Lining] Filtered to ${recentEmails.length} emails in date range (${startDate || 'any'} to ${endDate || 'any'})`);
+  } else {
+    // Default: last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    recentEmails = unlinedEmails.filter(email => {
+      const emailDate = new Date(email.date);
+      return emailDate >= thirtyDaysAgo;
+    });
+    console.log(`[Lining] Filtered to ${recentEmails.length} recent emails (last 30 days)`);
+  }
+
+  if (recentEmails.length === 0) {
     return NextResponse.json({
-      clusters: [],
-      message: 'No unclustered emails found',
-      clusteredCount: 0,
+      lines: [],
+      message: 'No recent emails found',
+      linedCount: 0,
     });
   }
 
-  // Get existing clusters
-  const existingClusters = await storage.getTopicClusters();
+  console.log(`[Lining] Processing ${recentEmails.length} emails`);
 
-  // Perform clustering
-  const newClusters = await clusteringService.clusterEmails(
-    unclusteredEmails,
-    threshold || 0.75,
-    existingClusters
+  // Get existing lines
+  const existingLines = await storage.getTopicLines();
+
+  // Create a set of existing line IDs to check for duplicates
+  const existingLineIds = new Set(existingLines.map(l => l.id));
+
+  // Perform lining (thread-first with semantic fallback)
+  const newLines = await lineService.clusterEmails(
+    recentEmails,
+    threshold || 0.65,
+    existingLines
   );
 
-  // Save new clusters
-  for (const cluster of newClusters) {
-    await storage.saveTopicCluster(cluster);
+  // Deduplicate new lines (in case of duplicates within the batch)
+  const seenIds = new Set<string>();
+  const dedupedLines: TopicLine[] = [];
+  for (const line of newLines) {
+    if (!seenIds.has(line.id)) {
+      seenIds.add(line.id);
+      dedupedLines.push(line);
+    }
   }
 
-  console.log(`[API /api/graph/topics] Clustered ${unclusteredEmails.length} emails into ${newClusters.length} clusters`);
+  // Save only truly new lines (not in existing storage)
+  const uniqueLines = dedupedLines.filter(l => !existingLineIds.has(l.id));
+  for (const line of uniqueLines) {
+    await storage.saveTopicLine(line);
+  }
+
+  console.log(`[API /api/graph/topics] Generated ${newLines.length} lines, deduped to ${dedupedLines.length}, skipped ${dedupedLines.length - uniqueLines.length} existing, saved ${uniqueLines.length} new`);
 
   return NextResponse.json({
-    clusters: newClusters,
-    message: `Created ${newClusters.length} new topic clusters`,
-    clusteredCount: unclusteredEmails.length,
+    lines: uniqueLines,
+    message: `Created ${uniqueLines.length} new topic lines`,
+    linedCount: recentEmails.length,
   });
 }
 
 /**
- * Handle manual cluster creation
- * Allows users to create a cluster with specific emails
+ * Handle manual line creation
+ * Allows users to create a line with specific emails
  */
-async function handleCreateCluster(userId: string, body: any) {
+async function handleCreateLine(userId: string, body: any) {
   const { name, description, emailIds } = body;
 
   if (!name || !Array.isArray(emailIds)) {
@@ -207,70 +290,70 @@ async function handleCreateCluster(userId: string, body: any) {
     );
   }
 
-  // Create cluster
+  // Create line
   const now = Date.now();
-  const cluster: TopicCluster = {
-    id: `cluster-manual-${now}`,
+  const line: TopicLine = {
+    id: `line-manual-${now}`,
     name,
-    description: description || `Manually created cluster: ${name}`,
+    description: description || `Manually created line: ${name}`,
     centroidEmbedding: [],
     emailIds,
     subjectVariations: emails.map(e => e.subject),
     firstEmailDate: Math.min(...emails.map(e => new Date(e.date).getTime())).toString(),
     lastEmailDate: Math.max(...emails.map(e => new Date(e.date).getTime())).toString(),
-    confidence: 1.0, // Manual clusters have high confidence
+    confidence: 1.0, // Manual lines have high confidence
     userConfirmed: true,
     createdAt: now,
     updatedAt: now,
   };
 
-  await storage.saveTopicCluster(cluster);
+  await storage.saveTopicLine(line);
 
   return NextResponse.json({
-    cluster,
-    message: 'Cluster created successfully',
+    line,
+    message: 'Line created successfully',
   });
 }
 
 /**
- * Handle cluster update
+ * Handle line update
  */
-async function handleUpdateCluster(userId: string, body: any) {
-  const { clusterId, name, description, userConfirmed, userRejected } = body;
+async function handleUpdateLine(userId: string, body: any) {
+  const { lineId, name, description, userConfirmed, userRejected } = body;
 
-  if (!clusterId) {
+  if (!lineId) {
     return NextResponse.json(
-      { error: 'Bad request', message: 'clusterId is required' },
+      { error: 'Bad request', message: 'lineId is required' },
       { status: 400 }
     );
   }
 
   const storage = new GraphStorageManager(userId);
-  const cluster = await storage.getTopicCluster(clusterId);
+  const line = await storage.getTopicLine(lineId);
 
-  if (!cluster) {
+  if (!line) {
     return NextResponse.json(
-      { error: 'Not found', message: `Cluster ${clusterId} not found` },
+      { error: 'Not found', message: `Line ${lineId} not found` },
       { status: 404 }
     );
   }
 
   // Update fields
-  if (name !== undefined) cluster.name = name;
-  if (description !== undefined) cluster.description = description;
+  if (name !== undefined) line.name = name;
+  if (description !== undefined) line.description = description;
   if (userConfirmed !== undefined) {
-    cluster.userConfirmed = userConfirmed;
-    cluster.confidence = Math.min(1.0, cluster.confidence + 0.1);
+    line.userConfirmed = userConfirmed;
+    line.confidence = Math.min(1.0, line.confidence + 0.1);
   }
   if (userRejected !== undefined) {
-    cluster.userRejected = userRejected;
+    line.userRejected = userRejected;
   }
-  cluster.updatedAt = Date.now();
+  line.updatedAt = Date.now();
 
-  await storage.saveTopicCluster(cluster);
+  await storage.saveTopicLine(line);
 
   return NextResponse.json({
-    cluster,
-    message: 'Cluster updated successfully',
+    line,
+    message: 'Line updated successfully',
   });
 }

@@ -18,12 +18,15 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import {
   EmailNode,
+  TopicLine,
   TopicCluster,
   EmailConnection,
   ThreadBranch,
   UserGraphPreferences,
   GraphMetadata,
-  EmailKnowledgeGraph
+  EmailKnowledgeGraph,
+  Suggestion,
+  BranchRecord,
 } from '../types';
 
 // File names for storage
@@ -34,6 +37,8 @@ const FILES = {
   THREADS: 'threads.json',
   PREFERENCES: 'preferences.json',
   METADATA: 'metadata.json',
+  SUGGESTION_QUEUE: 'suggestion_queue.json',
+  BRANCHING_HISTORY: 'branching_history.json',
 } as const;
 
 /**
@@ -134,7 +139,7 @@ export class FilesystemGraphStore {
     const [emailsData, connectionsData, topicsData, threadsData] = await Promise.all([
       this.readJSON<Record<string, EmailNode>>(path.join(userPath, FILES.EMAILS)),
       this.readJSON<Record<string, EmailConnection>>(path.join(userPath, FILES.CONNECTIONS)),
-      this.readJSON<Record<string, TopicCluster>>(path.join(userPath, FILES.TOPICS)),
+      this.readJSON<Record<string, TopicLine>>(path.join(userPath, FILES.TOPICS)),
       this.readJSON<Record<string, ThreadBranch>>(path.join(userPath, FILES.THREADS)),
     ]);
 
@@ -142,7 +147,7 @@ export class FilesystemGraphStore {
     const graph: EmailKnowledgeGraph = {
       emails: emailsData ? objectToMap(emailsData) : new Map(),
       connections: connectionsData ? objectToMap(connectionsData) : new Map(),
-      topicClusters: topicsData ? objectToMap(topicsData) : new Map(),
+      topicLines: topicsData ? objectToMap(topicsData) : new Map(),
       threadBranches: threadsData ? objectToMap(threadsData) : new Map(),
 
       // Rebuild indexes
@@ -175,7 +180,7 @@ export class FilesystemGraphStore {
     await Promise.all([
       this.writeJSON(path.join(userPath, FILES.EMAILS), mapToObject(graph.emails)),
       this.writeJSON(path.join(userPath, FILES.CONNECTIONS), mapToObject(graph.connections)),
-      this.writeJSON(path.join(userPath, FILES.TOPICS), mapToObject(graph.topicClusters)),
+      this.writeJSON(path.join(userPath, FILES.TOPICS), mapToObject(graph.topicLines)),
       this.writeJSON(path.join(userPath, FILES.THREADS), mapToObject(graph.threadBranches)),
     ]);
 
@@ -184,7 +189,7 @@ export class FilesystemGraphStore {
       userId,
       version: graph.version,
       emailCount: graph.emails.size,
-      topicClusterCount: graph.topicClusters.size,
+      topicLineCount: graph.topicLines.size,
       connectionCount: graph.connections.size,
       lastUpdated: Date.now(),
       indexedEmails: Array.from(graph.emails.keys()),
@@ -206,7 +211,7 @@ export class FilesystemGraphStore {
       graph = {
         emails: new Map(),
         connections: new Map(),
-        topicClusters: new Map(),
+        topicLines: new Map(),
         threadBranches: new Map(),
         emailByConversation: new Map(),
         emailByTopic: new Map(),
@@ -231,63 +236,72 @@ export class FilesystemGraphStore {
   }
 
   /**
-   * Add or update a topic cluster
+   * Add or update a topic line
    */
-  async updateTopicCluster(userId: string, cluster: TopicCluster): Promise<void> {
+  async updateTopicLine(userId: string, line: TopicLine): Promise<void> {
     let graph = await this.loadGraph(userId);
 
     if (!graph) {
       throw new Error(`No graph found for user ${userId}`);
     }
 
-    graph.topicClusters.set(cluster.id, cluster);
+    graph.topicLines.set(line.id, line);
     graph.lastUpdated = Date.now();
     graph.version++;
 
     // Update email-to-topic index
-    for (const emailId of cluster.emailIds) {
+    for (const emailId of line.emailIds) {
       if (!graph.emailByTopic.has(emailId)) {
         graph.emailByTopic.set(emailId, []);
       }
-      graph.emailByTopic.get(emailId)!.push(cluster.id);
+      graph.emailByTopic.get(emailId)!.push(line.id);
     }
 
     await this.saveGraph(userId, graph);
-    console.log(`[FilesystemGraphStore] Topic cluster ${cluster.id} updated in graph`);
+    console.log(`[FilesystemGraphStore] Topic line ${line.id} updated in graph`);
   }
 
   /**
-   * Delete a topic cluster
+   * Delete a topic line
    */
-  async deleteTopicCluster(userId: string, clusterId: string): Promise<void> {
+  async deleteTopicLine(userId: string, lineId: string): Promise<void> {
     const graph = await this.loadGraph(userId);
 
     if (!graph) {
       return;
     }
 
-    const cluster = graph.topicClusters.get(clusterId);
-    if (!cluster) {
+    const line = graph.topicLines.get(lineId);
+    if (!line) {
       return;
     }
 
     // Remove from email-to-topic index
-    for (const emailId of cluster.emailIds) {
+    for (const emailId of line.emailIds) {
       const topicIds = graph.emailByTopic.get(emailId);
       if (topicIds) {
-        const index = topicIds.indexOf(clusterId);
+        const index = topicIds.indexOf(lineId);
         if (index > -1) {
           topicIds.splice(index, 1);
         }
       }
     }
 
-    graph.topicClusters.delete(clusterId);
+    graph.topicLines.delete(lineId);
     graph.lastUpdated = Date.now();
     graph.version++;
 
     await this.saveGraph(userId, graph);
-    console.log(`[FilesystemGraphStore] Topic cluster ${clusterId} deleted from graph`);
+    console.log(`[FilesystemGraphStore] Topic line ${lineId} deleted from graph`);
+  }
+
+  // Backward compatibility aliases
+  async updateTopicCluster(userId: string, cluster: TopicCluster): Promise<void> {
+    return this.updateTopicLine(userId, cluster);
+  }
+
+  async deleteTopicCluster(userId: string, clusterId: string): Promise<void> {
+    return this.deleteTopicLine(userId, clusterId);
   }
 
   /**
@@ -306,7 +320,7 @@ export class FilesystemGraphStore {
         manualSplits: {},
         timelineView: 'chronological',
         showBranches: true,
-        clusterConfidenceThreshold: 0.5,
+        lineConfidenceThreshold: 0.5,
         expandSearchByTopic: true,
         topicExpansionLimit: 3,
         updatedAt: Date.now(),
@@ -345,13 +359,13 @@ export class FilesystemGraphStore {
       this.updateIndexesForEmail(graph, email);
     }
 
-    // Rebuild email-to-topic index from clusters
-    for (const [clusterId, cluster] of graph.topicClusters.entries()) {
-      for (const emailId of cluster.emailIds) {
+    // Rebuild email-to-topic index from lines
+    for (const [lineId, line] of graph.topicLines.entries()) {
+      for (const emailId of line.emailIds) {
         if (!graph.emailByTopic.has(emailId)) {
           graph.emailByTopic.set(emailId, []);
         }
-        graph.emailByTopic.get(emailId)!.push(clusterId);
+        graph.emailByTopic.get(emailId)!.push(lineId);
       }
     }
   }
@@ -408,5 +422,43 @@ export class FilesystemGraphStore {
       console.error(`[FilesystemGraphStore] Failed to delete graph for user ${userId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Load suggestion queue for user
+   */
+  async loadSuggestionQueue(userId: string): Promise<Suggestion[]> {
+    const userPath = this.getUserGraphPath(userId);
+    const queue = await this.readJSON<Suggestion[]>(path.join(userPath, FILES.SUGGESTION_QUEUE));
+    return queue || [];
+  }
+
+  /**
+   * Save suggestion queue for user
+   */
+  async saveSuggestionQueue(userId: string, suggestions: Suggestion[]): Promise<void> {
+    await this.ensureUserDirectory(userId);
+    const userPath = this.getUserGraphPath(userId);
+    await this.writeJSON(path.join(userPath, FILES.SUGGESTION_QUEUE), suggestions);
+    console.log(`[FilesystemGraphStore] Suggestion queue saved for user ${userId} (${suggestions.length} suggestions)`);
+  }
+
+  /**
+   * Load branching history for user
+   */
+  async loadBranchingHistory(userId: string): Promise<BranchRecord[]> {
+    const userPath = this.getUserGraphPath(userId);
+    const history = await this.readJSON<BranchRecord[]>(path.join(userPath, FILES.BRANCHING_HISTORY));
+    return history || [];
+  }
+
+  /**
+   * Save branching history for user
+   */
+  async saveBranchingHistory(userId: string, history: BranchRecord[]): Promise<void> {
+    await this.ensureUserDirectory(userId);
+    const userPath = this.getUserGraphPath(userId);
+    await this.writeJSON(path.join(userPath, FILES.BRANCHING_HISTORY), history);
+    console.log(`[FilesystemGraphStore] Branching history saved for user ${userId} (${history.length} records)`);
   }
 }

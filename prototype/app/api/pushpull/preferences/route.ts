@@ -2,11 +2,16 @@
  * Push/Pull Preferences API
  * GET: List preferences
  * POST: Create preference
+ *
+ * Supports three preference types:
+ * - sender: specific email addresses
+ * - thread: specific conversation threads (by conversationId)
+ * - line: topic lines/clusters (by lineId)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getPushPullService } from '@/services/pushPull/pushPullService';
-import { PreferenceQuery } from '@/services/pushPull/types';
+import { PreferenceQuery, PreferenceType } from '@/services/pushPull/types';
 
 function getUserId(request: NextRequest): string | null {
   const userInfoCookie = request.cookies.get('user_info')?.value;
@@ -20,10 +25,12 @@ function getUserId(request: NextRequest): string | null {
   }
 }
 
+const VALID_TYPES: PreferenceType[] = ['sender', 'thread', 'line'];
+
 /**
  * GET /api/pushpull/preferences
  * Query parameters:
- * - type: 'sender' | 'subject' (optional)
+ * - type: 'sender' | 'thread' | 'line' (optional)
  * - value: string (optional)
  */
 export async function GET(request: NextRequest) {
@@ -34,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type') as 'sender' | 'subject' | null;
+    const type = searchParams.get('type') as PreferenceType | null;
     const value = searchParams.get('value');
 
     const service = getPushPullService();
@@ -56,7 +63,8 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/pushpull/preferences
- * Body: { type: 'sender' | 'subject', value: string, mode: 'push' | 'pull' }
+ * Body: { type: 'sender' | 'thread' | 'line', value: string, mode: 'push' | 'pull', isBoss?: boolean, isVIP?: boolean, name?: string }
+ * If preference exists, updates it instead of creating duplicate
  */
 export async function POST(request: NextRequest) {
   try {
@@ -66,23 +74,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { type, value, mode } = body;
+    const { type, value, mode, isBoss, isVIP, name } = body;
 
-    if (!type || !value || !mode) {
+    if (!type || !value) {
       return NextResponse.json(
-        { error: 'type, value, and mode are required' },
+        { error: 'type and value are required' },
         { status: 400 }
       );
     }
 
-    if (!['sender', 'subject'].includes(type)) {
+    if (!VALID_TYPES.includes(type)) {
       return NextResponse.json(
-        { error: 'type must be "sender" or "subject"' },
+        { error: 'type must be "sender", "thread", or "line"' },
         { status: 400 }
       );
     }
 
-    if (!['push', 'pull'].includes(mode)) {
+    // Mode defaults to 'pull', but Boss/VIP always push
+    const effectiveMode = (isBoss || isVIP) ? 'push' : (mode || 'pull');
+
+    if (!['push', 'pull'].includes(effectiveMode)) {
       return NextResponse.json(
         { error: 'mode must be "push" or "pull"' },
         { status: 400 }
@@ -97,19 +108,23 @@ export async function POST(request: NextRequest) {
       (p) => p.value.toLowerCase() === value.toLowerCase()
     );
 
-    // If force flag is set, delete existing and create new
-    if (existing && body.force === true) {
-      await service.deletePreference(userId, existing.id);
-    } else if (existing) {
-      // Return existing preference with flag indicating it's a duplicate
-      return NextResponse.json({
-        error: 'Preference already exists',
-        existingPreference: existing,
-        code: 'DUPLICATE_PREFERENCE'
-      }, { status: 409 });
+    if (existing) {
+      // Update existing preference instead of creating duplicate
+      const updated = await service.updatePreferenceById(userId, existing.id, {
+        mode: effectiveMode,
+        ...(isBoss !== undefined && { isBoss }),
+        ...(isVIP !== undefined && { isVIP }),
+        ...(name !== undefined && { name }),
+      });
+      return NextResponse.json({ preference: updated });
     }
 
-    const preference = await service.setPreference(userId, type, value, mode);
+    // Create new preference with extended fields
+    const preference = await service.setPreference(userId, type, value, effectiveMode, {
+      ...(isBoss !== undefined && { isBoss }),
+      ...(isVIP !== undefined && { isVIP }),
+      ...(name !== undefined && { name }),
+    });
 
     return NextResponse.json({ preference });
   } catch (error) {

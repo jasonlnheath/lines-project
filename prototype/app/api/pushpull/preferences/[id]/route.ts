@@ -1,5 +1,7 @@
 /**
  * Single Preference API
+ * GET: Get a single preference
+ * PUT: Update a preference
  * DELETE: Remove a preference
  */
 
@@ -15,6 +17,79 @@ function getUserId(request: NextRequest): string | null {
     return user.id;
   } catch {
     return null;
+  }
+}
+
+/**
+ * GET /api/pushpull/preferences/[id]
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const userId = getUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: 'Preference ID is required' }, { status: 400 });
+    }
+
+    const service = getPushPullService();
+    const preference = await service.getPreferenceById(userId, id);
+
+    if (!preference) {
+      return NextResponse.json({ error: 'Preference not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ preference });
+  } catch (error) {
+    console.error('[GET /api/pushpull/preferences/[id]] Error:', error);
+    return NextResponse.json({ error: 'Failed to get preference' }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/pushpull/preferences/[id]
+ * Update a preference (mode, isVIP, isBoss, etc.)
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const userId = getUserId(request);
+    if (!userId) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: 'Preference ID is required' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { mode, isVIP, isBoss, name } = body;
+
+    const service = getPushPullService();
+    const updated = await service.updatePreferenceById(userId, id, {
+      ...(mode && { mode }),
+      ...(isVIP !== undefined && { isVIP }),
+      ...(isBoss !== undefined && { isBoss }),
+      ...(name !== undefined && { name }),
+    });
+
+    if (!updated) {
+      return NextResponse.json({ error: 'Preference not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ preference: updated });
+  } catch (error) {
+    console.error('[PUT /api/pushpull/preferences/[id]] Error:', error);
+    return NextResponse.json({ error: 'Failed to update preference' }, { status: 500 });
   }
 }
 

@@ -55,9 +55,9 @@ export class GLMEmbeddingService extends GLMClient {
    * Extracts concepts, entities, topics, and sentiment
    */
   async analyzeEmail(email: EmailNode): Promise<SemanticAnalysis> {
-    const systemPrompt = `You are an expert at analyzing emails to extract their semantic meaning.
-Your task is to identify key concepts, topics, entities, and sentiment from email content.
-Focus on business context and actionable information.`;
+    const systemPrompt = `You are a JSON API. You must respond ONLY with valid JSON.
+No explanations, no markdown formatting, no numbered lists.
+Your output must be parseable by JSON.parse() immediately.`;
 
     const userPrompt = this.buildAnalysisPrompt(email);
 
@@ -102,12 +102,17 @@ Return your analysis as JSON in this exact format:
     {"type": "person", "text": "Name", "confidence": 0.9},
     {"type": "company", "text": "Company Name", "confidence": 0.8}
   ],
-  "sentiment": "positive" | "neutral" | "negative",
+  "sentiment": "neutral",
   "keywords": ["keyword1", "keyword2", "keyword3"],
   "summary": "2-3 sentence summary",
-  "conversationType": "thread_start" | "reply" | "forward" | "informational",
-  "urgency": "high" | "medium" | "low"
+  "conversationType": "informational",
+  "urgency": "medium"
 }
+
+Valid values:
+- sentiment: "positive", "neutral", or "negative"
+- conversationType: "thread_start", "reply", "forward", or "informational"
+- urgency: "high", "medium", or "low"
 
 Guidelines:
 - concepts: 3-5 key concepts that capture the core meaning
@@ -116,41 +121,65 @@ Guidelines:
 - sentiment: overall emotional tone
 - keywords: Important terms for search
 - conversationType: thread_start (new discussion), reply, forward, or informational
-- urgency: Based on content, deadlines, and importance flag`;
+- urgency: Based on content, deadlines, and importance flag
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.`;
   }
 
   /**
    * Parse JSON response from GLM
+   * Handles various output formats and common JSON issues
    */
   private parseAnalysisResponse(response: string): SemanticAnalysis | null {
     try {
-      // Try to extract JSON from response
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) ||
-                       response.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from response (handle markdown code blocks)
+      let jsonStr = response;
 
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-
-        // Validate and normalize the response
-        return {
-          concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
-          topics: Array.isArray(parsed.topics) ? parsed.topics : [],
-          entities: Array.isArray(parsed.entities) ? parsed.entities : [],
-          sentiment: ['positive', 'neutral', 'negative'].includes(parsed.sentiment)
-            ? parsed.sentiment
-            : 'neutral',
-          keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
-          summary: parsed.summary || '',
-          conversationType: ['thread_start', 'reply', 'forward', 'informational'].includes(parsed.conversationType)
-            ? parsed.conversationType
-            : 'informational',
-          urgency: ['high', 'medium', 'low'].includes(parsed.urgency)
-            ? parsed.urgency
-            : 'medium',
-        };
+      // Remove markdown code blocks if present
+      const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1];
+      } else {
+        // Try to find JSON object in response
+        const objMatch = response.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          jsonStr = objMatch[0];
+        }
       }
+
+      // Clean up common JSON issues:
+      // 1. Remove numbered list markers and markdown formatting
+      jsonStr = jsonStr.replace(/^\s*\d+\.\s+\*\*[^*]+\*\*:\s*$/gm, '');
+      jsonStr = jsonStr.replace(/^#{1,6}\s.*$/gm, '');
+      jsonStr = jsonStr.replace(/^\s*[-*+]\s+/gm, '');
+      // 2. Remove comments (// ...)
+      jsonStr = jsonStr.replace(/\/\/.*$/gm, '');
+      // 3. Remove trailing commas
+      jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+
+      const parsed = JSON.parse(jsonStr);
+
+      // Validate and normalize the response
+      return {
+        concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
+        topics: Array.isArray(parsed.topics) ? parsed.topics : [],
+        entities: Array.isArray(parsed.entities) ? parsed.entities : [],
+        sentiment: ['positive', 'neutral', 'negative'].includes(parsed.sentiment)
+          ? parsed.sentiment
+          : 'neutral',
+        keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+        summary: parsed.summary || '',
+        conversationType: ['thread_start', 'reply', 'forward', 'informational'].includes(parsed.conversationType)
+          ? parsed.conversationType
+          : 'informational',
+        urgency: ['high', 'medium', 'low'].includes(parsed.urgency)
+          ? parsed.urgency
+          : 'medium',
+      };
     } catch (error) {
       console.warn('[GLMEmbeddingService] Failed to parse analysis response:', error);
+      // Log the raw response for debugging
+      console.warn('[GLMEmbeddingService] Raw response (first 1000 chars):', response.substring(0, 1000));
     }
 
     // Fallback: return null (caller will handle)

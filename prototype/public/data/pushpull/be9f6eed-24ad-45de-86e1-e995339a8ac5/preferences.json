@@ -1,0 +1,42 @@
+[
+  {
+    "id": "1774210887082-n93imjm",
+    "userId": "be9f6eed-24ad-45de-86e1-e995339a8ac5",
+    "type": "sender",
+    "value": "jasonlnheath@gmail.com",
+    "mode": "push",
+    "createdAt": 1774210887082,
+    "updatedAt": 1774212988466,
+    "isVIP": false,
+    "isBoss": true
+  },
+  {
+    "id": "1774210929691-vi0sp39",
+    "userId": "be9f6eed-24ad-45de-86e1-e995339a8ac5",
+    "type": "sender",
+    "value": "jheath@waltheremc.com",
+    "mode": "pull",
+    "createdAt": 1774210929691,
+    "updatedAt": 1774213046313,
+    "isVIP": false,
+    "isBoss": false
+  },
+  {
+    "id": "1774211005849-6oplqkb",
+    "userId": "be9f6eed-24ad-45de-86e1-e995339a8ac5",
+    "type": "sender",
+    "value": "@fleetpride.com",
+    "mode": "push",
+    "createdAt": 1774211005849,
+    "updatedAt": 1774213000071
+  },
+  {
+    "id": "1774211369500-4xpac5e",
+    "userId": "be9f6eed-24ad-45de-86e1-e995339a8ac5",
+    "type": "line",
+    "value": "cluster-thread-AAQkAGFiMThhMWE4LTBiOTYtNDY2OS05NjE3LThkMThlYTNiNTAxMQAQAMxsvYPJwkJ-iyA2kB814PY=",
+    "mode": "pull",
+    "createdAt": 1774211369500,
+    "updatedAt": 1774213061604
+  }
+]

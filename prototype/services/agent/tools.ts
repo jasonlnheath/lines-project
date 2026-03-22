@@ -5,6 +5,8 @@
 
 import { Tool, ToolContext, ToolResult, GraphEmail, TopicCluster } from './types';
 import { graphEndpoints } from '../msalConfig';
+import { runFullReport, fetchLast30DaysEmails, buildThreadReport, validateClustering } from '../graph/clusteringTestService';
+import { GraphStorageManager } from '../graph/storage/graphStorageManager';
 
 /**
  * Read tool - Fetch full email content by ID
@@ -717,6 +719,245 @@ export const topicExploreTool: Tool = {
 };
 
 /**
+ * Cluster Search tool - Semantic cluster search with learning loop
+ * Finds relevant clusters using semantic content, then searches for related orphans and threads
+ */
+export const clusterSearchTool: Tool = {
+  name: 'cluster_search',
+  description: 'Semantic search across email clusters using their semantic profiles (not just names). This enhanced search: 1) Finds clusters by semantic similarity to the query, 2) Identifies related orphan emails that should branch into clusters, 3) Finds other clusters that should merge, 4) Queues suggestions for user review. The learning loop means accepted suggestions improve future searches.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Search query to find semantically related clusters',
+      },
+      maxClusters: {
+        type: 'string',
+        description: 'Maximum number of clusters to search for suggestions (default: 5)',
+      },
+      includeOrphanSearch: {
+        type: 'boolean',
+        description: 'Whether to search for orphan emails to branch (default: true)',
+      },
+      includeThreadMerge: {
+        type: 'boolean',
+        description: 'Whether to search for thread merge candidates (default: true)',
+      },
+      queueSuggestions: {
+        type: 'boolean',
+        description: 'Queue found suggestions for user review (default: true)',
+      },
+      minScore: {
+        type: 'string',
+        description: 'Minimum similarity score to queue (default: 0.3, range 0-1)',
+      },
+    },
+    required: ['query'],
+  },
+  handler: async ({ query, maxClusters = '5', includeOrphanSearch = true, includeThreadMerge = true, queueSuggestions = true, minScore = '0.3' }, context): Promise<ToolResult> => {
+    try {
+      console.log('[clusterSearchTool] Semantic cluster search:', { query, maxClusters, includeOrphanSearch, includeThreadMerge });
+
+      // Call the cluster search API endpoint
+      const params = new URLSearchParams({
+        query,
+        maxClusters,
+        includeOrphanSearch: String(includeOrphanSearch),
+        includeThreadMerge: String(includeThreadMerge),
+        queueSuggestions: String(queueSuggestions),
+        minScore,
+      });
+
+      const response = await fetch(`/api/graph/clusters/search?${params}`, {
+        headers: {
+          Authorization: `Bearer ${context.accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Failed to search clusters: ${response.statusText}` };
+      }
+
+      const data = await response.json();
+
+      console.log(`[clusterSearchTool] Found ${data.clusters?.length || 0} clusters, ${data.suggestionsQueued || 0} suggestions queued`);
+
+      return {
+        success: true,
+        data: {
+          query,
+          clusters: data.clusters || [],
+          suggestionsQueued: data.suggestionsQueued || 0,
+          suggestionTypes: data.suggestionTypes || { orphanBranches: 0, threadMerges: 0 },
+          autoBranchEnabled: data.autoBranchEnabled || false,
+        },
+      };
+    } catch (error) {
+      console.error('[clusterSearchTool] Exception:', error);
+      return { success: false, error: `Error searching clusters: ${error}` };
+    }
+  },
+};
+
+/**
+ * Cluster validate tool - compares local clusters against Graph thread ground truth
+ */
+export const clusterValidateTool: Tool = {
+  name: 'cluster_validate',
+  description: 'Validate email clustering by comparing local clusters against real Microsoft Graph thread data (last 30 days). Returns a report with: thread count, cluster count, perfect/partial/missing matches, name accuracy, and a per-thread breakdown. Use this to diagnose clustering problems.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        description: 'What to fetch: "thread-stats" (Graph ground truth only), "validate" (comparison report), or "full" (both, default)',
+        enum: ['thread-stats', 'validate', 'full'],
+      },
+    },
+    required: [],
+  },
+  handler: async ({ action = 'full' }, context: ToolContext): Promise<ToolResult> => {
+    try {
+      if (action === 'thread-stats') {
+        const messages = await fetchLast30DaysEmails(context.accessToken);
+        const report = buildThreadReport(messages);
+        return {
+          success: true,
+          data: {
+            period: report.period,
+            totalEmails: report.totalEmails,
+            threadCount: report.threadCount,
+            threads: report.threads.map(t => ({
+              name: t.name,
+              emailCount: t.emailCount,
+              firstDate: t.firstDate.split('T')[0],
+              lastDate: t.lastDate.split('T')[0],
+            })),
+          },
+        };
+      }
+
+      if (action === 'validate') {
+        const [messages, clusters] = await Promise.all([
+          fetchLast30DaysEmails(context.accessToken),
+          new GraphStorageManager(context.userId).getTopicClusters(),
+        ]);
+        const threadStats = buildThreadReport(messages);
+        const report = validateClustering(threadStats, clusters);
+        return {
+          success: true,
+          data: {
+            summary: report.summary,
+            problems: report.threads
+              .filter(t => t.matchType !== 'perfect')
+              .map(t => ({
+                threadName: t.threadName,
+                threadEmails: t.threadEmailCount,
+                clusterName: t.clusterName,
+                clusterEmails: t.clusterEmailCount,
+                coverage: t.coverage ? `${Math.round(t.coverage * 100)}%` : '0%',
+                issue: t.matchType,
+              })),
+            unmatchedClusters: report.unmatchedClusters,
+          },
+        };
+      }
+
+      // full
+      const { threadStats, clusteringValidation } = await runFullReport(
+        context.accessToken,
+        context.userId
+      );
+      return {
+        success: true,
+        data: {
+          threadStats: {
+            period: threadStats.period,
+            totalEmails: threadStats.totalEmails,
+            threadCount: threadStats.threadCount,
+          },
+          summary: clusteringValidation.summary,
+          problems: clusteringValidation.threads
+            .filter(t => t.matchType !== 'perfect')
+            .map(t => ({
+              threadName: t.threadName,
+              threadEmails: t.threadEmailCount,
+              clusterName: t.clusterName,
+              clusterEmails: t.clusterEmailCount,
+              coverage: t.coverage ? `${Math.round(t.coverage * 100)}%` : '0%',
+              issue: t.matchType,
+            })),
+          unmatchedClusters: clusteringValidation.unmatchedClusters,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `cluster_validate failed: ${error}` };
+    }
+  },
+};
+
+/**
+ * Orphan Search tool - Search unclustered emails
+ */
+export const orphanSearchTool: Tool = {
+  name: 'orphan_search',
+  description: 'Search unclustered emails that may be related to the query. Use when cluster_search returns few or no results, or to find new emails that haven\'t been added to clusters yet. Returns orphan emails that could be queued for clustering.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Search query to find in orphan email subjects, bodies, or metadata',
+      },
+      limit: {
+        type: 'string',
+        description: 'Maximum orphan emails to return (default: 20)',
+      },
+    },
+    required: ['query'],
+  },
+  handler: async ({ query, limit = '20' }, context): Promise<ToolResult> => {
+    try {
+      console.log('[orphanSearchTool] Searching unclustered emails:', { query, limit });
+
+      // Call the API to get unclustered emails filtered by query
+      const params = new URLSearchParams({
+        query: query,
+        limit: limit,
+      });
+
+      const response = await fetch(`/api/graph/emails?${params}`, {
+        headers: {
+          Authorization: `Bearer ${context.accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Failed to search orphans: ${response.statusText}` };
+      }
+
+      const data = await response.json();
+
+      console.log(`[orphanSearchTool] Found ${data.orphans?.length || 0} unclustered emails`);
+
+      return {
+        success: true,
+        data: {
+          query,
+          orphans: data.orphans || [],
+          count: data.orphans?.length || 0,
+          message: `Found ${data.orphans?.length || 0} unclustered emails. Consider clustering these to improve future searches.`,
+        },
+      };
+    } catch (error) {
+      console.error('[orphanSearchTool] Exception:', error);
+      return { success: false, error: `Error searching orphans: ${error}` };
+    }
+  },
+};
+
+/**
  * Registry of all available tools
  */
 export const toolRegistry: Record<string, Tool> = {
@@ -726,22 +967,37 @@ export const toolRegistry: Record<string, Tool> = {
   fetch: fetchTool,
   summarize: summarizeTool,
   topic_explore: topicExploreTool,
+  cluster_search: clusterSearchTool,
+  orphan_search: orphanSearchTool,
+  cluster_validate: clusterValidateTool,
 };
 
 /**
- * Helper: Convert HTML to plain text
+ * Helper: Convert HTML to plain text while preserving emojis and unicode characters
+ * Uses fromCodePoint for proper emoji handling (surrogate pairs)
  */
 function htmlToText(html: string): string {
   return html
-    .replace(/<style[^>]*>.*?<\/style>/gi, '')
-    .replace(/<script[^>]*>.*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, '')
+    // Remove style and script tags first (with content)
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    // Decode HTML numeric entities (including emoji codes like &#128512;)
+    // Use fromCodePoint for proper emoji handling (surrogate pairs)
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    // Decode named HTML entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
+    .replace(/&apos;/g, "'")
+    .replace(/&apos;/g, "'")
+    // Remove remaining HTML tags but preserve content
+    .replace(/<[^>]+>/g, '')
+    // Clean up whitespace while preserving line breaks
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+/g, ' ')
     .trim();
 }
 
